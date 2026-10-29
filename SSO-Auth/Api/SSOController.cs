@@ -13,6 +13,7 @@ using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.SSO_Auth.Config;
 using Jellyfin.Plugin.SSO_Auth.Helpers;
+using Jellyfin.Plugin.SSO_Auth.Security;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Library;
@@ -42,7 +43,7 @@ public class SSOController : ControllerBase
     private readonly ILoggerFactory _loggerFactory;
     private readonly ICryptoProvider _cryptoProvider;
     private readonly IHttpClientFactory _httpClientFactory;
-    private static readonly IDictionary<string, TimedAuthorizeState> StateManager = new Dictionary<string, TimedAuthorizeState>();
+    private readonly OidcLoginTransactionStore _transactionStore;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="SSOController"/> class.
@@ -54,6 +55,7 @@ public class SSOController : ControllerBase
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="cryptoProvider">Instance of the <see cref="ICryptoProvider"/> interface.</param>
     /// <param name="httpClientFactory">Instance of the <see cref="IHttpClientFactory"/> interface.</param>
+    /// <param name="transactionStore">OIDC login transaction store.</param>
     public SSOController(
         ILogger<SSOController> logger,
         ILoggerFactory loggerFactory,
@@ -61,7 +63,8 @@ public class SSOController : ControllerBase
         IUserManager userManager,
         IAuthorizationContext authContext,
         ICryptoProvider cryptoProvider,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        OidcLoginTransactionStore transactionStore)
     {
         _sessionManager = sessionManager;
         _userManager = userManager;
@@ -70,6 +73,7 @@ public class SSOController : ControllerBase
         _logger = logger;
         _loggerFactory = loggerFactory;
         _httpClientFactory = httpClientFactory;
+        _transactionStore = transactionStore;
         _logger.LogInformation("SSO Controller initialized");
     }
 
@@ -102,7 +106,7 @@ public class SSOController : ControllerBase
                 return BadRequest("Missing state");
             }
 
-            if (!StateManager.TryGetValue(state, out var timedState))
+            if (!_transactionStore.TryGetPending(provider, state, out var transaction))
             {
                 return BadRequest("Invalid or expired state");
             }
@@ -134,7 +138,7 @@ public class SSOController : ControllerBase
             options.Policy.Discovery.RequireHttps = !config.DisableHttps;
             options.Policy.Discovery.ValidateIssuerName = !config.DoNotValidateIssuerName;
             var oidcClient = new OidcClient(options);
-            var currentState = timedState.State;
+            var currentState = transaction.AuthorizeState;
             var result = await oidcClient.ProcessResponseAsync(Request.QueryString.Value, currentState).ConfigureAwait(false);
 
             if (result.IsError)
@@ -142,26 +146,24 @@ public class SSOController : ControllerBase
                 return ReturnError(StatusCodes.Status400BadRequest, $"Error logging in: {result.Error} - {result.ErrorDescription}");
             }
 
-            if (!config.EnableFolderRoles && config.EnabledFolders != null)
-            {
-                timedState.Folders = new List<string>(config.EnabledFolders);
-            }
-            else
-            {
-                timedState.Folders = new List<string>();
-            }
+            var folders = !config.EnableFolderRoles && config.EnabledFolders != null
+                ? new List<string>(config.EnabledFolders)
+                : new List<string>();
 
-            timedState.EnableLiveTv = config.EnableLiveTv;
-            timedState.EnableLiveTvManagement = config.EnableLiveTvManagement;
+            bool enableLiveTv = config.EnableLiveTv;
+            bool enableLiveTvManagement = config.EnableLiveTvManagement;
+            bool isAdmin = false;
+            bool isValid = false;
+            string username = null;
 
             foreach (var claim in result.User.Claims)
             {
                 if (claim.Type == (config.DefaultUsernameClaim?.Trim() ?? "preferred_username"))
                 {
-                    timedState.Username = claim.Value;
+                    username = claim.Value;
                     if (config.Roles == null || config.Roles.Length == 0)
                     {
-                        timedState.Valid = true;
+                        isValid = true;
                     }
                 }
 
@@ -232,7 +234,7 @@ public class SSOController : ControllerBase
                                 {
                                     if (role.Equals(validRoles))
                                     {
-                                        timedState.Valid = true;
+                                        isValid = true;
                                     }
                                 }
                             }
@@ -244,7 +246,7 @@ public class SSOController : ControllerBase
                                 {
                                     if (role.Equals(validAdminRoles))
                                     {
-                                        timedState.Admin = true;
+                                        isAdmin = true;
                                     }
                                 }
                             }
@@ -256,7 +258,7 @@ public class SSOController : ControllerBase
                                 {
                                     if (role.Equals(folderRoleMap.Role?.Trim()))
                                     {
-                                        timedState.Folders.AddRange(folderRoleMap.Folders);
+                                        folders.AddRange(folderRoleMap.Folders);
                                     }
                                 }
                             }
@@ -270,7 +272,7 @@ public class SSOController : ControllerBase
                                     {
                                         if (role.Equals(validLiveTvRoles))
                                         {
-                                            timedState.EnableLiveTv = true;
+                                            enableLiveTv = true;
                                         }
                                     }
                                 }
@@ -282,7 +284,7 @@ public class SSOController : ControllerBase
                                     {
                                         if (role.Equals(validLiveTvManagementRoles))
                                         {
-                                            timedState.EnableLiveTvManagement = true;
+                                            enableLiveTvManagement = true;
                                         }
                                     }
                                 }
@@ -293,33 +295,50 @@ public class SSOController : ControllerBase
             }
 
             // If the provider doesn't support the preferred username claim, then use the sub claim
-            if (!timedState.Valid)
+            if (!isValid)
             {
                 foreach (var claim in result.User.Claims)
                 {
                     if (claim.Type == "sub")
                     {
-                        timedState.Username = claim.Value;
+                        username = claim.Value;
                         if (config.Roles.Length == 0)
                         {
-                            timedState.Valid = true;
+                            isValid = true;
                         }
                     }
                 }
             }
 
-            bool isLinking = timedState.IsLinking;
+            bool isLinking = transaction.Purpose == OidcLoginPurpose.Link;
 
-            if (timedState.Valid)
+            if (isValid && string.IsNullOrWhiteSpace(username))
             {
-                _logger.LogInformation($"Is request linking: {isLinking}");
-                return Content(WebResponse.Generator(data: state, provider: provider, baseUrl: GetRequestBase(config.SchemeOverride, config.PortOverride), mode: "OID", isLinking: isLinking), MediaTypeNames.Text.Html);
+                return ReturnError(StatusCodes.Status400BadRequest, "OIDC response did not contain a usable username claim");
+            }
+
+            if (isValid)
+            {
+                var validatedLogin = new OidcValidatedLogin(
+                    username,
+                    isAdmin,
+                    folders.ToArray(),
+                    enableLiveTv,
+                    enableLiveTvManagement);
+
+                if (!_transactionStore.TryMarkReady(provider, state, validatedLogin, out var exchangeToken))
+                {
+                    return BadRequest("Invalid or expired state");
+                }
+
+                _logger.LogInformation("OIDC callback validated for provider {Provider}; linking={IsLinking}", provider, isLinking);
+                return Content(WebResponse.Generator(data: exchangeToken, provider: provider, baseUrl: GetRequestBase(config.SchemeOverride, config.PortOverride), mode: "OID", isLinking: isLinking), MediaTypeNames.Text.Html);
             }
             else
             {
                 _logger.LogWarning(
                     "OpenID user {Username} has one or more incorrect role claims: {@Claims}. Expected any one of: {@ExpectedClaims}",
-                    timedState.Username,
+                    username,
                     result.User.Claims.Select(o => new { o.Type, o.Value }),
                     config.Roles);
 
@@ -341,7 +360,6 @@ public class SSOController : ControllerBase
     [HttpGet("OID/start/{provider}")]
     public async Task<ActionResult> OidChallenge(string provider, [FromQuery] bool isLinking = false)
     {
-        Invalidate();
         OidConfig config;
         try
         {
@@ -390,10 +408,11 @@ public class SSOController : ControllerBase
                 return ReturnError(StatusCodes.Status400BadRequest, $"Error preparing login: {state.Error} - {state.ErrorDescription}");
             }
 
-            StateManager.Add(state.State, new TimedAuthorizeState(state, DateTime.Now));
+            _transactionStore.Register(
+                provider,
+                state,
+                isLinking ? OidcLoginPurpose.Link : OidcLoginPurpose.Authenticate);
 
-            // Track whether this is a linking request or not.
-            StateManager[state.State].IsLinking = isLinking;
             return Redirect(state.StartUrl);
         }
 
@@ -449,17 +468,6 @@ public class SSOController : ControllerBase
     }
 
     /// <summary>
-    /// This is a debug endpoint to list all running OpenID flows. Requires administrator privileges.
-    /// </summary>
-    /// <returns>The list of OpenID flows in progress.</returns>
-    [Authorize(Policy = Policies.RequiresElevation)]
-    [HttpGet("OID/States")]
-    public ActionResult OidStates()
-    {
-        return Ok(StateManager);
-    }
-
-    /// <summary>
     /// This endpoint accepts JSON and will authorize the user from the device values passed from the client.
     /// </summary>
     /// <param name="provider">Name of provider to authenticate against.</param>
@@ -480,32 +488,32 @@ public class SSOController : ControllerBase
             return BadRequest("No matching provider found");
         }
 
-        if (config.Enabled)
+        if (!config.Enabled)
         {
-            foreach (var kvp in StateManager)
-            {
-                if (kvp.Value.State.State.Equals(response.Data) && kvp.Value.Valid)
-                {
-                    Guid userId = await CreateCanonicalLinkAndUserIfNotExist("oid", provider, kvp.Value.Username);
-
-                    var authenticationResult = await Authenticate(
-                        userId,
-                        kvp.Value.Admin,
-                        config.EnableAuthorization,
-                        config.EnableAllFolders,
-                        kvp.Value.Folders.ToArray(),
-                        kvp.Value.EnableLiveTv,
-                        kvp.Value.EnableLiveTvManagement,
-                        response,
-                        config.DefaultProvider?.Trim())
-                        .ConfigureAwait(false);
-                    StateManager.Remove(kvp.Key);
-                    return Ok(authenticationResult);
-                }
-            }
+            return BadRequest("No matching provider found");
         }
 
-        return Problem("Something went wrong");
+        if (!_transactionStore.TryConsume(provider, response.Data, OidcLoginPurpose.Authenticate, out var transaction))
+        {
+            return Unauthorized("Invalid, expired, or already-used login transaction");
+        }
+
+        var login = transaction.ValidatedLogin;
+        Guid userId = await CreateCanonicalLinkAndUserIfNotExist("oid", provider, login.Username);
+
+        var authenticationResult = await Authenticate(
+            userId,
+            login.IsAdministrator,
+            config.EnableAuthorization,
+            config.EnableAllFolders,
+            login.Folders,
+            login.EnableLiveTv,
+            login.EnableLiveTvManagement,
+            response,
+            config.DefaultProvider?.Trim())
+            .ConfigureAwait(false);
+
+        return Ok(authenticationResult);
     }
 
     /// <summary>
@@ -726,16 +734,12 @@ public class SSOController : ControllerBase
             return BadRequest("No matching provider found");
         }
 
-        foreach (var kvp in StateManager)
+        if (!_transactionStore.TryConsume(provider, response.Data, OidcLoginPurpose.Link, out var transaction))
         {
-            if (kvp.Value.State.State.Equals(response.Data) && kvp.Value.Valid)
-            {
-                string providerUserId = kvp.Value.Username;
-                return CreateCanonicalLink("oid", provider, jellyfinUserId, providerUserId);
-            }
+            return Unauthorized("Invalid, expired, or already-used linking transaction");
         }
 
-        return Problem("Something went wrong!");
+        return CreateCanonicalLink("oid", provider, jellyfinUserId, transaction.ValidatedLogin.Username);
     }
 
     private ActionResult CreateCanonicalLink(string mode, string provider, [FromRoute] Guid jellyfinUserId, string providerUserId)
@@ -818,18 +822,6 @@ public class SSOController : ControllerBase
         return await _sessionManager.AuthenticateDirect(authRequest).ConfigureAwait(false);
     }
 
-    private void Invalidate()
-    {
-        foreach (var kvp in StateManager)
-        {
-            var now = DateTime.Now;
-            if (now.Subtract(kvp.Value.Created).TotalMinutes > 1)
-            {
-                StateManager.Remove(kvp.Key);
-            }
-        }
-    }
-
     private string GetRequestBase(string schemeOverride = null, int? portOverride = null)
     {
         int requestPort;
@@ -903,70 +895,3 @@ public class AuthResponse
     public string Data { get; set; }
 }
 
-/// <summary>
-/// A manager for OpenID to manage the state of the clients.
-/// </summary>
-public class TimedAuthorizeState
-{
-    /// <summary>
-    /// Initializes a new instance of the <see cref="TimedAuthorizeState"/> class.
-    /// </summary>
-    /// <param name="state">The AuthorizeState to time.</param>
-    /// <param name="created">When this state was created.</param>
-    public TimedAuthorizeState(AuthorizeState state, DateTime created)
-    {
-        State = state;
-        Created = created;
-        Valid = false;
-        Admin = false;
-        IsLinking = false;
-        EnableLiveTv = false;
-        EnableLiveTvManagement = false;
-    }
-
-    /// <summary>
-    /// Gets or sets the Authorization State of the client.
-    /// </summary>
-    public AuthorizeState State { get; set; }
-
-    /// <summary>
-    /// Gets or sets when this object was created to time it out.
-    /// </summary>
-    public DateTime Created { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the user is valid.
-    /// </summary>
-    public bool Valid { get; set; }
-
-    /// <summary>
-    /// Gets or sets the user tied to the state.
-    /// </summary>
-    public string Username { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the user is an administrator.
-    /// </summary>
-    public bool Admin { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the state is
-    /// tied to a linking flow (instead of a login flow).
-    /// </summary>
-    public bool IsLinking { get; set; }
-
-    /// <summary>
-    /// Gets or sets the folders the user is allowed access to.
-    /// </summary>
-    public List<string> Folders { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the user is allowed to view live TV.
-    /// </summary>
-    public bool EnableLiveTv { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the user is allowed to manage live TV.
-    /// </summary>
-    public bool EnableLiveTvManagement { get; set; }
-}

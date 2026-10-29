@@ -477,7 +477,11 @@ async function main() {
 
     var request = {deviceId, appName, appVersion, deviceName, data};
 
-    if (" + $"{isLinking}".ToLower() + @") await link(request);
+    if (" + $"{isLinking}".ToLower() + @") {
+        await link(request);
+        window.location.replace('" + punycodeBaseUrl + @"/web/index.html');
+        return;
+    }
 
     var url = '" + punycodeBaseUrl + "/sso/" + mode + "/Auth/" + provider + @"';
 

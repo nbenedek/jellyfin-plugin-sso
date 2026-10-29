@@ -1,17 +1,13 @@
 using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
+using Duende.IdentityModel.OidcClient;
 
 namespace Jellyfin.Plugin.SSO_Auth.Security;
 
 /// <summary>
 /// Stores short-lived, provider-bound OIDC login transactions.
 /// </summary>
-/// <remarks>
-/// This class is intentionally not wired into the production flow yet. It establishes
-/// the state-management API that will replace the controller's static dictionary in
-/// the next refactor step.
-/// </remarks>
 public sealed class OidcLoginTransactionStore
 {
     private readonly object _gate = new();
@@ -23,8 +19,6 @@ public sealed class OidcLoginTransactionStore
     /// <summary>
     /// Initializes a new instance of the <see cref="OidcLoginTransactionStore"/> class.
     /// </summary>
-    /// <param name="timeProvider">Time source used for expiry checks.</param>
-    /// <param name="lifetime">Maximum lifetime of a login transaction.</param>
     public OidcLoginTransactionStore(TimeProvider timeProvider = null, TimeSpan? lifetime = null)
     {
         _timeProvider = timeProvider ?? TimeProvider.System;
@@ -37,47 +31,76 @@ public sealed class OidcLoginTransactionStore
     }
 
     /// <summary>
-    /// Registers a pending OIDC protocol state for a provider.
+    /// Registers a pending OIDC flow.
     /// </summary>
-    /// <param name="provider">Configured provider name.</param>
-    /// <param name="protocolState">OIDC protocol state returned by the client library.</param>
-    public void Register(string provider, string protocolState)
+    public void Register(string provider, AuthorizeState authorizeState, OidcLoginPurpose purpose)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(provider);
-        ArgumentException.ThrowIfNullOrWhiteSpace(protocolState);
+        ArgumentNullException.ThrowIfNull(authorizeState);
+        ArgumentException.ThrowIfNullOrWhiteSpace(authorizeState.State);
 
         lock (_gate)
         {
             PurgeExpiredLocked();
 
-            if (_pendingByProtocolState.ContainsKey(protocolState))
+            if (_pendingByProtocolState.ContainsKey(authorizeState.State))
             {
                 throw new InvalidOperationException("An OIDC transaction with this protocol state already exists.");
             }
 
             var now = _timeProvider.GetUtcNow();
             _pendingByProtocolState.Add(
-                protocolState,
+                authorizeState.State,
                 new OidcLoginTransaction(
                     provider,
-                    protocolState,
+                    authorizeState,
+                    purpose,
                     now,
                     now.Add(_lifetime),
                     OidcLoginTransactionStatus.PendingCallback,
+                    null,
                     null));
         }
     }
 
     /// <summary>
-    /// Marks a validated callback ready for one-time exchange.
+    /// Gets an unexpired pending transaction bound to the specified provider.
     /// </summary>
-    /// <param name="provider">Configured provider name.</param>
-    /// <param name="protocolState">OIDC protocol state being completed.</param>
-    /// <param name="exchangeToken">Generated one-time browser exchange token.</param>
-    /// <returns><see langword="true"/> when the pending transaction was found and transitioned.</returns>
-    public bool TryMarkReady(string provider, string protocolState, out string exchangeToken)
+    public bool TryGetPending(string provider, string protocolState, out OidcLoginTransaction transaction)
+    {
+        transaction = null;
+
+        if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(protocolState))
+        {
+            return false;
+        }
+
+        lock (_gate)
+        {
+            PurgeExpiredLocked();
+
+            if (!_pendingByProtocolState.TryGetValue(protocolState, out var candidate)
+                || !string.Equals(candidate.Provider, provider, StringComparison.Ordinal))
+            {
+                return false;
+            }
+
+            transaction = candidate;
+            return true;
+        }
+    }
+
+    /// <summary>
+    /// Retires protocol state after a validated callback and issues a separate one-time exchange token.
+    /// </summary>
+    public bool TryMarkReady(
+        string provider,
+        string protocolState,
+        OidcValidatedLogin validatedLogin,
+        out string exchangeToken)
     {
         exchangeToken = null;
+        ArgumentNullException.ThrowIfNull(validatedLogin);
 
         lock (_gate)
         {
@@ -101,11 +124,13 @@ public sealed class OidcLoginTransactionStore
                 token,
                 new OidcLoginTransaction(
                     pending.Provider,
-                    pending.ProtocolState,
+                    pending.AuthorizeState,
+                    pending.Purpose,
                     pending.CreatedAt,
                     pending.ExpiresAt,
                     OidcLoginTransactionStatus.ReadyForExchange,
-                    token));
+                    token,
+                    validatedLogin));
 
             exchangeToken = token;
             return true;
@@ -113,22 +138,29 @@ public sealed class OidcLoginTransactionStore
     }
 
     /// <summary>
-    /// Atomically consumes a provider-bound exchange token.
+    /// Atomically consumes an unexpired, provider- and purpose-bound exchange token.
     /// </summary>
-    /// <param name="provider">Configured provider name.</param>
-    /// <param name="exchangeToken">One-time exchange token.</param>
-    /// <param name="transaction">Consumed transaction metadata.</param>
-    /// <returns><see langword="true"/> only on the first valid consumption.</returns>
-    public bool TryConsume(string provider, string exchangeToken, out OidcLoginTransaction transaction)
+    public bool TryConsume(
+        string provider,
+        string exchangeToken,
+        OidcLoginPurpose purpose,
+        out OidcLoginTransaction transaction)
     {
         transaction = null;
+
+        if (string.IsNullOrWhiteSpace(provider) || string.IsNullOrWhiteSpace(exchangeToken))
+        {
+            return false;
+        }
 
         lock (_gate)
         {
             PurgeExpiredLocked();
 
             if (!_readyByExchangeToken.TryGetValue(exchangeToken, out var ready)
-                || !string.Equals(ready.Provider, provider, StringComparison.Ordinal))
+                || !string.Equals(ready.Provider, provider, StringComparison.Ordinal)
+                || ready.Purpose != purpose
+                || ready.ValidatedLogin is null)
             {
                 return false;
             }
@@ -136,11 +168,13 @@ public sealed class OidcLoginTransactionStore
             _readyByExchangeToken.Remove(exchangeToken);
             transaction = new OidcLoginTransaction(
                 ready.Provider,
-                ready.ProtocolState,
+                ready.AuthorizeState,
+                ready.Purpose,
                 ready.CreatedAt,
                 ready.ExpiresAt,
                 OidcLoginTransactionStatus.Consumed,
-                ready.ExchangeToken);
+                ready.ExchangeToken,
+                ready.ValidatedLogin);
             return true;
         }
     }
@@ -177,18 +211,55 @@ public sealed class OidcLoginTransactionStore
 }
 
 /// <summary>
+/// Purpose of an OIDC login transaction.
+/// </summary>
+public enum OidcLoginPurpose
+{
+    Authenticate = 0,
+    Link = 1
+}
+
+/// <summary>
 /// Lifecycle state of an OIDC login transaction.
 /// </summary>
 public enum OidcLoginTransactionStatus
 {
-    /// <summary>Waiting for the validated OIDC callback.</summary>
     PendingCallback = 0,
-
-    /// <summary>Validated and ready for a one-time browser exchange.</summary>
     ReadyForExchange = 1,
-
-    /// <summary>The one-time browser exchange has been consumed.</summary>
     Consumed = 2
+}
+
+/// <summary>
+/// Validated identity and authorization data derived from an OIDC response.
+/// </summary>
+public sealed class OidcValidatedLogin
+{
+    /// <summary>
+    /// Initializes a new instance of the <see cref="OidcValidatedLogin"/> class.
+    /// </summary>
+    public OidcValidatedLogin(
+        string username,
+        bool isAdministrator,
+        string[] folders,
+        bool enableLiveTv,
+        bool enableLiveTvManagement)
+    {
+        Username = username ?? throw new ArgumentNullException(nameof(username));
+        IsAdministrator = isAdministrator;
+        Folders = folders ?? Array.Empty<string>();
+        EnableLiveTv = enableLiveTv;
+        EnableLiveTvManagement = enableLiveTvManagement;
+    }
+
+    public string Username { get; }
+
+    public bool IsAdministrator { get; }
+
+    public string[] Folders { get; }
+
+    public bool EnableLiveTv { get; }
+
+    public bool EnableLiveTvManagement { get; }
 }
 
 /// <summary>
@@ -201,35 +272,37 @@ public sealed class OidcLoginTransaction
     /// </summary>
     public OidcLoginTransaction(
         string provider,
-        string protocolState,
+        AuthorizeState authorizeState,
+        OidcLoginPurpose purpose,
         DateTimeOffset createdAt,
         DateTimeOffset expiresAt,
         OidcLoginTransactionStatus status,
-        string exchangeToken)
+        string exchangeToken,
+        OidcValidatedLogin validatedLogin)
     {
         Provider = provider;
-        ProtocolState = protocolState;
+        AuthorizeState = authorizeState;
+        Purpose = purpose;
         CreatedAt = createdAt;
         ExpiresAt = expiresAt;
         Status = status;
         ExchangeToken = exchangeToken;
+        ValidatedLogin = validatedLogin;
     }
 
-    /// <summary>Gets the configured provider name.</summary>
     public string Provider { get; }
 
-    /// <summary>Gets the OIDC protocol state.</summary>
-    public string ProtocolState { get; }
+    public AuthorizeState AuthorizeState { get; }
 
-    /// <summary>Gets the creation time.</summary>
+    public OidcLoginPurpose Purpose { get; }
+
     public DateTimeOffset CreatedAt { get; }
 
-    /// <summary>Gets the hard expiry time.</summary>
     public DateTimeOffset ExpiresAt { get; }
 
-    /// <summary>Gets the current transaction status.</summary>
     public OidcLoginTransactionStatus Status { get; }
 
-    /// <summary>Gets the one-time exchange token after callback validation.</summary>
     public string ExchangeToken { get; }
+
+    public OidcValidatedLogin ValidatedLogin { get; }
 }
