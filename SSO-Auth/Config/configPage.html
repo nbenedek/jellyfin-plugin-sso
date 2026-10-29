@@ -26,9 +26,7 @@
             <i>Note:</i>
             Making changes to this configuration requires a restart of Jellyfin.
             <br />
-            This plug-in is in early development, not all configuration options
-            have been implented in the UI, for example, SAML provider
-            configuration has not been implemented.
+            This fork is being refactored around OpenID Connect only.
             <br />
             See the
             <a
@@ -558,24 +556,6 @@
                     The default username claim to use from OpenID by default. If
                     it is not set, it defaults to
                     <code>preferred_username</code>.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="AvatarUrlFormat"
-                    >Set avatar url format</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="AvatarUrlFormat"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The url of the avatar with sso variable format: example :
-                    <code>https://example.com/@{user_id}.png</code>
                   </div>
                 </div>
 

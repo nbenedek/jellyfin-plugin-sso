@@ -33,17 +33,12 @@
     <PackageReference Include="Jellyfin.Controller" Version="10.11.0" />
     <PackageReference Include="Jellyfin.Model" Version="10.11.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
-    <PackageReference Include="System.Security.Cryptography.Xml" Version="6.0.1" />
   </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="SerilogAnalyzer" Version="0.15.0" PrivateAssets="All" />
     <PackageReference Include="StyleCop.Analyzers" Version="1.2.0-beta.556" PrivateAssets="all" />
     <PackageReference Include="SmartAnalyzers.MultithreadingAnalyzer" Version="1.1.31" PrivateAssets="All" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="Lib\Lib.fsproj" />
   </ItemGroup>
 
   <PropertyGroup>

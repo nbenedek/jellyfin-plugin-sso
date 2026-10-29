@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Mime;
@@ -16,10 +15,8 @@ using Jellyfin.Plugin.SSO_Auth.Config;
 using Jellyfin.Plugin.SSO_Auth.Helpers;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Authentication;
-using MediaBrowser.Controller.Configuration;
 using MediaBrowser.Controller.Library;
 using MediaBrowser.Controller.Net;
-using MediaBrowser.Controller.Providers;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Cryptography;
 using Microsoft.AspNetCore.Authorization;
@@ -28,7 +25,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using SSO_Auth.Lib;
 
 namespace Jellyfin.Plugin.SSO_Auth.Api;
 
@@ -45,8 +41,6 @@ public class SSOController : ControllerBase
     private readonly ILogger<SSOController> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ICryptoProvider _cryptoProvider;
-    private readonly IProviderManager _providerManager;
-    private readonly IServerConfigurationManager _serverConfigurationManager;
     private readonly IHttpClientFactory _httpClientFactory;
     private static readonly IDictionary<string, TimedAuthorizeState> StateManager = new Dictionary<string, TimedAuthorizeState>();
 
@@ -59,9 +53,7 @@ public class SSOController : ControllerBase
     /// <param name="authContext">Instance of the <see cref="IAuthorizationContext"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="cryptoProvider">Instance of the <see cref="ICryptoProvider"/> interface.</param>
-    /// <param name="providerManager">Instance of the <see cref="IProviderManager"/> interface.</param>
     /// <param name="httpClientFactory">Instance of the <see cref="IHttpClientFactory"/> interface.</param>
-    /// <param name="serverConfigurationManager">Instance of the <see cref="IServerConfigurationManager"/> interface.</param>
     public SSOController(
         ILogger<SSOController> logger,
         ILoggerFactory loggerFactory,
@@ -69,9 +61,7 @@ public class SSOController : ControllerBase
         IUserManager userManager,
         IAuthorizationContext authContext,
         ICryptoProvider cryptoProvider,
-        IProviderManager providerManager,
-        IHttpClientFactory httpClientFactory,
-        IServerConfigurationManager serverConfigurationManager)
+        IHttpClientFactory httpClientFactory)
     {
         _sessionManager = sessionManager;
         _userManager = userManager;
@@ -79,8 +69,6 @@ public class SSOController : ControllerBase
         _cryptoProvider = cryptoProvider;
         _logger = logger;
         _loggerFactory = loggerFactory;
-        _providerManager = providerManager;
-        _serverConfigurationManager = serverConfigurationManager;
         _httpClientFactory = httpClientFactory;
         _logger.LogInformation("SSO Controller initialized");
     }
@@ -92,11 +80,10 @@ public class SSOController : ControllerBase
     /// <param name="state">The current request state.</param>
     /// <returns>A webpage that will complete the client-side flow.</returns>
     // Actually a GET: https://github.com/IdentityModel/IdentityModel.OidcClient/issues/325
-    [HttpGet("OID/r/{provider}")]
     [HttpGet("OID/redirect/{provider}")]
     public async Task<ActionResult> OidPost(
         [FromRoute] string provider,
-        [FromQuery] string state) // Although this is a GET function, this function is called `Post` for consistency with SAML
+        [FromQuery] string state)
     {
         OidConfig config;
         try
@@ -126,7 +113,7 @@ public class SSOController : ControllerBase
                 Authority = config.OidEndpoint?.Trim(),
                 ClientId = config.OidClientId?.Trim(),
                 ClientSecret = config.OidSecret?.Trim(),
-                RedirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/{(Request.Path.Value.Contains("/start/", StringComparison.InvariantCultureIgnoreCase) ? "redirect" : "r")}/" + provider,
+                RedirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/redirect/{provider}",
                 Scope = string.Join(" ", scopes.Prepend("openid profile")),
                 DisablePushedAuthorization = config.DisablePushedAuthorization,
                 LoggerFactory = _loggerFactory,
@@ -166,13 +153,6 @@ public class SSOController : ControllerBase
 
             timedState.EnableLiveTv = config.EnableLiveTv;
             timedState.EnableLiveTvManagement = config.EnableLiveTvManagement;
-
-            if (config.AvatarUrlFormat is not null)
-            {
-                timedState.AvatarURL = result.User.Claims.Aggregate(
-                    config.AvatarUrlFormat,
-                    (s, claim) => s.Contains($"@{{{claim.Type}}}") ? s.Replace($"@{{{claim.Type}}}", claim.Value) : s);
-            }
 
             foreach (var claim in result.User.Claims)
             {
@@ -374,14 +354,7 @@ public class SSOController : ControllerBase
 
         if (config.Enabled)
         {
-            bool newPath = config.NewPath;
-            if (!isLinking)
-            {
-                newPath = Request.Path.Value.Contains("/start/", StringComparison.InvariantCultureIgnoreCase);
-                config.NewPath = newPath;
-            }
-
-            string redirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/{(newPath ? "redirect" : "r")}/" + provider;
+            string redirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/redirect/{provider}";
 
             var options = new OidcClientOptions
             {
@@ -476,16 +449,6 @@ public class SSOController : ControllerBase
     }
 
     /// <summary>
-    /// Lists the SAML providers names only.
-    /// </summary>
-    /// <returns>The list of OpenID configurations.</returns>
-    [HttpGet("SAML/GetNames")]
-    public ActionResult SamlProviderNames()
-    {
-        return Ok(SSOPlugin.Instance.Configuration.SamlConfigs.Keys);
-    }
-
-    /// <summary>
     /// This is a debug endpoint to list all running OpenID flows. Requires administrator privileges.
     /// </summary>
     /// <returns>The list of OpenID flows in progress.</returns>
@@ -534,297 +497,12 @@ public class SSOController : ControllerBase
                         kvp.Value.EnableLiveTv,
                         kvp.Value.EnableLiveTvManagement,
                         response,
-                        config.DefaultProvider?.Trim(),
-                        kvp.Value.AvatarURL)
+                        config.DefaultProvider?.Trim())
                         .ConfigureAwait(false);
                     StateManager.Remove(kvp.Key);
                     return Ok(authenticationResult);
                 }
             }
-        }
-
-        return Problem("Something went wrong");
-    }
-
-    /// <summary>
-    /// This is the callback for the SAML flow. This creates a webpage to complete auth.
-    /// </summary>
-    /// <param name="provider">The provider that is calling back.</param>
-    /// <param name="relayState">
-    ///    RelayState given in the original saml request. If it is equal to "linking",
-    ///    We consider this to be a linking request.
-    /// </param>
-    /// <returns>A webpage that will complete the client-side flow.</returns>
-    [HttpPost("SAML/p/{provider}")]
-    [HttpPost("SAML/post/{provider}")]
-    public ActionResult SamlPost(string provider, [FromQuery] string relayState = null)
-    {
-        SamlConfig config;
-        try
-        {
-            config = SSOPlugin.Instance.Configuration.SamlConfigs[provider];
-        }
-        catch (KeyNotFoundException)
-        {
-            return BadRequest("No matching provider found");
-        }
-
-        bool isLinking = relayState == "linking";
-
-        _logger.LogInformation(
-            $"SAML request has relayState of {relayState}");
-
-        if (config.Enabled)
-        {
-            var samlResponse = new Response(config.SamlCertificate, Request.Form["SAMLResponse"]);
-
-            if (!samlResponse.IsValid())
-            {
-                return Problem("Invalid SAML signature");
-            }
-
-            bool valid = false;
-
-            // If no roles are configured, don't use RBAC
-            if (config.Roles.Length == 0)
-            {
-                valid = true;
-            }
-
-            // Check if user is allowed to log in based on roles
-            foreach (string role in samlResponse.GetCustomAttributes("Role"))
-            {
-                foreach (string allowedRole in config.Roles)
-                {
-                    if (allowedRole.Equals(role))
-                    {
-                        valid = true;
-                    }
-                }
-            }
-
-            if (valid)
-            {
-                return Content(
-                        WebResponse.Generator(
-                            data: Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(samlResponse.Xml)),
-                            provider: provider,
-                            baseUrl: GetRequestBase(config.SchemeOverride, config.PortOverride),
-                            mode: "SAML",
-                            isLinking: isLinking),
-                        MediaTypeNames.Text.Html);
-            }
-
-            _logger.LogWarning(
-                "SAML user: {UserId} has insufficient roles: {@Roles}. Expected any one of: {@ExpectedRoles}",
-                samlResponse.GetNameID(),
-                samlResponse.GetCustomAttributes("Role"),
-                config.Roles);
-            return ReturnError(StatusCodes.Status401Unauthorized, "Error. Check permissions.");
-        }
-
-        return ReturnError(StatusCodes.Status400BadRequest, "No active providers found");
-    }
-
-    /// <summary>
-    /// Initializes the SAML flow. This will redirect the user to the SAML provider.
-    /// </summary>
-    /// <param name="provider">The provider to being the flow with.</param>
-    /// <param name="isLinking">Whether this flow intends to link an account, or initiate auth.</param>
-    /// <returns>A redirect to the SAML provider's auth page.</returns>
-    [HttpGet("SAML/p/{provider}")]
-    [HttpGet("SAML/start/{provider}")]
-    public RedirectResult SamlChallenge(string provider, [FromQuery] bool isLinking = false)
-    {
-        SamlConfig config;
-        try
-        {
-            config = SSOPlugin.Instance.Configuration.SamlConfigs[provider];
-        }
-        catch (KeyNotFoundException)
-        {
-            throw new ArgumentException("Provider does not exist");
-        }
-
-        if (config.Enabled)
-        {
-            bool newPath = config.NewPath;
-            if (!isLinking)
-            {
-                newPath = Request.Path.Value.Contains("/start/", StringComparison.InvariantCultureIgnoreCase);
-                config.NewPath = newPath;
-            }
-
-            string redirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/SAML/{(newPath ? "post" : "p")}/" + provider;
-            string relayState = null;
-            if (isLinking)
-            {
-                relayState = "linking";
-            }
-
-            var request = new AuthRequest(
-                config.SamlClientId.Trim(),
-                redirectUri);
-
-            return Redirect(request.GetRedirectUrl(config.SamlEndpoint.Trim(), relayState));
-        }
-
-        throw new ArgumentException("Provider does not exist");
-    }
-
-    /// <summary>
-    /// Adds a SAML configuration. If the provider already exists, overwrite it.
-    /// </summary>
-    /// <param name="provider">The provider name to add.</param>
-    /// <param name="newConfig">The SAML configuration object (deserialized) from JSON.</param>
-    /// <returns>The success result.</returns>
-    [Authorize(Policy = Policies.RequiresElevation)]
-    [HttpPost("SAML/Add/{provider}")]
-    public OkResult SamlAdd(string provider, [FromBody] SamlConfig newConfig)
-    {
-        var configuration = SSOPlugin.Instance.Configuration;
-        configuration.SamlConfigs[provider] = newConfig;
-        SSOPlugin.Instance.UpdateConfiguration(configuration);
-        return Ok();
-    }
-
-    /// <summary>
-    /// Deletes a provider from the configuration with a given ID.
-    /// </summary>
-    /// <param name="provider">The ID of the provider to delete.</param>
-    /// <returns>The success result.</returns>
-    [Authorize(Policy = Policies.RequiresElevation)]
-    [HttpGet("SAML/Del/{provider}")]
-    public OkResult SamlDel(string provider)
-    {
-        var configuration = SSOPlugin.Instance.Configuration;
-        configuration.SamlConfigs.Remove(provider);
-        SSOPlugin.Instance.UpdateConfiguration(configuration);
-        return Ok();
-    }
-
-    /// <summary>
-    /// Returns a list of all SAML providers configured. Requires administrator privileges.
-    /// </summary>
-    /// <returns>A list of all of the Saml providers available.</returns>
-    [Authorize(Policy = Policies.RequiresElevation)]
-    [HttpGet("SAML/Get")]
-    public ActionResult SamlProviders()
-    {
-        return Ok(SSOPlugin.Instance.Configuration.SamlConfigs);
-    }
-
-    /// <summary>
-    /// This endpoint accepts JSON and will authorize the user from the device values passed from the client.
-    /// </summary>
-    /// <param name="provider">The provider to authenticate against.</param>
-    /// <param name="response">The data passed to the client to ensure it is the right one.</param>
-    /// <returns>JSON for the client to populate information with.</returns>
-    [HttpPost("SAML/Auth/{provider}")]
-    [Consumes(MediaTypeNames.Application.Json)]
-    [Produces(MediaTypeNames.Application.Json)]
-    public async Task<ActionResult> SamlAuth(string provider, [FromBody] AuthResponse response)
-    {
-        SamlConfig config;
-        try
-        {
-            config = SSOPlugin.Instance.Configuration.SamlConfigs[provider];
-        }
-        catch (KeyNotFoundException)
-        {
-            return BadRequest("No matching provider found");
-        }
-
-        if (config.Enabled)
-        {
-            bool isAdmin = false;
-            bool liveTv = config.EnableLiveTv;
-            bool liveTvManagement = config.EnableLiveTvManagement;
-            var samlResponse = new Response(config.SamlCertificate, response.Data);
-
-            if (!samlResponse.IsValid())
-            {
-                return Problem("Invalid SAML signature");
-            }
-
-            List<string> folders;
-            if (!config.EnableFolderRoles && config.EnabledFolders != null)
-            {
-                folders = new List<string>(config.EnabledFolders);
-            }
-            else
-            {
-                folders = new List<string>();
-            }
-
-            foreach (string role in samlResponse.GetCustomAttributes("Role"))
-            {
-                if (config.AdminRoles != null)
-                {
-                    foreach (string allowedRole in config.AdminRoles)
-                    {
-                        if (allowedRole.Equals(role))
-                        {
-                            isAdmin = true;
-                        }
-                    }
-                }
-
-                if (config.EnableFolderRoles)
-                {
-                    if (config.FolderRoleMapping != null)
-                    {
-                        foreach (FolderRoleMap folderRoleMap in config.FolderRoleMapping)
-                        {
-                            if (folderRoleMap.Role.Equals(role))
-                            {
-                                folders.AddRange(folderRoleMap.Folders);
-                            }
-                        }
-                    }
-                }
-
-                if (config.EnableLiveTvRoles)
-                {
-                    if (config.LiveTvRoles != null)
-                    {
-                        foreach (string allowedLiveTvRole in config.LiveTvRoles)
-                        {
-                            if (allowedLiveTvRole.Equals(role))
-                            {
-                                liveTv = true;
-                            }
-                        }
-                    }
-
-                    if (config.LiveTvManagementRoles != null)
-                    {
-                        foreach (string allowedLiveTvManagementRole in config.LiveTvManagementRoles)
-                        {
-                            if (allowedLiveTvManagementRole.Equals(role))
-                            {
-                                liveTvManagement = true;
-                            }
-                        }
-                    }
-                }
-            }
-
-            Guid userId = await CreateCanonicalLinkAndUserIfNotExist("saml", provider, samlResponse.GetNameID());
-
-            var authenticationResult = await Authenticate(
-                userId,
-                isAdmin,
-                config.EnableAuthorization,
-                config.EnableAllFolders,
-                folders.ToArray(),
-                liveTv,
-                liveTvManagement,
-                response,
-                config.DefaultProvider?.Trim(),
-                null)
-                .ConfigureAwait(false);
-            return Ok(authenticationResult);
         }
 
         return Problem("Something went wrong");
@@ -850,17 +528,12 @@ public class SSOController : ControllerBase
     {
         SerializableDictionary<string, Guid> links = null;
 
-        switch (mode.ToLower())
+        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
         {
-            case "saml":
-                links = SSOPlugin.Instance.Configuration.SamlConfigs[provider].CanonicalLinks;
-                break;
-            case "oid":
-                links = SSOPlugin.Instance.Configuration.OidConfigs[provider].CanonicalLinks;
-                break;
-            default:
-                throw new ArgumentException($"{mode} is not a valid choice between 'saml' and 'oid'");
+            throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
         }
+
+        links = SSOPlugin.Instance.Configuration.OidConfigs[provider].CanonicalLinks;
 
         if (links == null)
         {
@@ -944,7 +617,7 @@ public class SSOController : ControllerBase
     /// <summary>
     /// Create a canonical link for a given user. Must be performed by the user being changed, or admin.
     /// </summary>
-    /// <param name="mode">The mode of the function; SAML or OID.</param>
+    /// <param name="mode">The mode of the function; currently only OID is supported.</param>
     /// <param name="provider">The name of the provider to link to a jellyfin account.</param>
     /// <param name="jellyfinUserId">The user ID within jellyfin to link to the provider.</param>
     /// <param name="authResponse">The client information to authenticate the user with.</param>
@@ -960,21 +633,18 @@ public class SSOController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, "User is not allowed to link SSO providers.");
         }
 
-        switch (mode.ToLower())
+        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
         {
-            case "saml":
-                return SamlLink(provider, jellyfinUserId, authResponse);
-            case "oid":
-                return OidLink(provider, jellyfinUserId, authResponse);
-            default:
-                throw new ArgumentException($"{mode} is not a valid choice between 'saml' and 'oid'");
+            throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
         }
+
+        return OidLink(provider, jellyfinUserId, authResponse);
     }
 
     /// <summary>
     /// Unregisters a given mapping from id within provider to user.
     /// </summary>
-    /// <param name="mode">The mode of the function; SAML or OID.</param>
+    /// <param name="mode">The mode of the function; currently only OID is supported.</param>
     /// <param name="provider">The name of the provider from which the link should be removed.</param>
     /// <param name="jellyfinUserId">The user ID within jellyfin to unlink from the provider.</param>
     /// <param name="canonicalName">The user ID within jellyfin to unlink.</param>
@@ -1005,34 +675,6 @@ public class SSOController : ControllerBase
     }
 
     /// <summary>
-    /// Gets all the saml links for a user.
-    /// </summary>
-    /// <param name="jellyfinUserId">The user ID within jellyfin for which to return the links.</param>
-    /// <returns>A dictionary of provider : link mappings.</returns>
-    [Authorize]
-    [HttpGet("saml/links/{jellyfinUserId}")]
-    [Produces(MediaTypeNames.Application.Json)]
-    public async Task<ActionResult<SerializableDictionary<string, IEnumerable<string>>>> GetSamlLinksByUser(Guid jellyfinUserId)
-    {
-        if (!await RequestHelpers.AssertCanUpdateUser(_authContext, HttpContext.Request, jellyfinUserId, true).ConfigureAwait(false))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, "Non-admin is not allowed to query other user's mappings.");
-        }
-
-        var mappings = new SerializableDictionary<string, IEnumerable<string>>();
-        var providerList = SSOPlugin.Instance.Configuration.SamlConfigs;
-
-        foreach (var providerName in providerList.Keys)
-        {
-            var canonLinks = providerList[providerName].CanonicalLinks;
-            var canonKeys = from link in canonLinks where link.Value == jellyfinUserId select link.Key;
-            mappings[providerName] = canonKeys;
-        }
-
-        return mappings;
-    }
-
-    /// <summary>
     /// Gets all the oid links for a user.
     /// </summary>
     /// <param name="jellyfinUserId">The user ID within jellyfin for which to return the links.</param>
@@ -1058,42 +700,6 @@ public class SSOController : ControllerBase
         }
 
         return mappings;
-    }
-
-    /// <summary>
-    /// Validate a saml link request and create the link if it is valid.
-    /// </summary>
-    /// <param name="provider">The provider to authenticate against.</param>
-    /// <param name="jellyfinUserId">
-    ///   The ID of the account to be linked to the provider.
-    ///   Must be performed by this user, or an admin.
-    /// </param>
-    /// <param name="response">The data passed to the client to ensure it is the right one.</param>
-    /// <returns>JSON for the client to populate information with.</returns>
-    [Consumes(MediaTypeNames.Application.Json)]
-    [Produces(MediaTypeNames.Application.Json)]
-    private ActionResult SamlLink(string provider, Guid jellyfinUserId, AuthResponse response)
-    {
-        SamlConfig config;
-        try
-        {
-            config = SSOPlugin.Instance.Configuration.SamlConfigs[provider];
-        }
-        catch (KeyNotFoundException)
-        {
-            return BadRequest("No matching provider found");
-        }
-
-        var samlResponse = new Response(config.SamlCertificate, response.Data);
-
-        if (!samlResponse.IsValid())
-        {
-            return Problem("Invalid SAML signature");
-        }
-
-        string providerUserId = samlResponse.GetNameID();
-
-        return CreateCanonicalLink("saml", provider, jellyfinUserId, providerUserId);
     }
 
     /// <summary>
@@ -1153,17 +759,12 @@ public class SSOController : ControllerBase
     private OkResult UpdateCanonicalLinkConfig(SerializableDictionary<string, Guid> links, string mode, string provider)
     {
         var configuration = SSOPlugin.Instance.Configuration;
-        switch (mode.ToLower())
+        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
         {
-            case "saml":
-                configuration.SamlConfigs[provider].CanonicalLinks = links;
-                break;
-            case "oid":
-                configuration.OidConfigs[provider].CanonicalLinks = links;
-                break;
-            default:
-                throw new ArgumentException($"{mode} is not a valid choice between 'saml' and 'oid'");
+            throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
         }
+
+        configuration.OidConfigs[provider].CanonicalLinks = links;
 
         SSOPlugin.Instance.UpdateConfiguration(configuration);
         return Ok();
@@ -1181,8 +782,7 @@ public class SSOController : ControllerBase
     /// <param name="enableLiveTvAdmin">Determines whether live TV can be managed by this user.</param>
     /// <param name="authResponse">The client information to authenticate the user with.</param>
     /// <param name="defaultProvider">The default provider of the user to be set after logging in.</param>
-    /// <param name="avatarUrl">The new avatar url for the user.</param>
-    private async Task<AuthenticationResult> Authenticate(Guid userId, bool isAdmin, bool enableAuthorization, bool enableAllFolders, string[] enabledFolders, bool enableLiveTv, bool enableLiveTvAdmin, AuthResponse authResponse, string defaultProvider, string avatarUrl)
+    private async Task<AuthenticationResult> Authenticate(Guid userId, bool isAdmin, bool enableAuthorization, bool enableAllFolders, string[] enabledFolders, bool enableLiveTv, bool enableLiveTvAdmin, AuthResponse authResponse, string defaultProvider)
     {
         User user = _userManager.GetUserById(userId);
         if (enableAuthorization)
@@ -1192,56 +792,6 @@ public class SSOController : ControllerBase
             if (!enableAllFolders)
             {
                 user.SetPreference(PreferenceKind.EnabledFolders, enabledFolders);
-            }
-        }
-
-        if (avatarUrl is not null)
-        {
-            try
-            {
-                using var client = _httpClientFactory.CreateClient();
-
-                System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-                string version = fvi.FileVersion;
-                client.DefaultRequestHeaders.UserAgent.ParseAdd($"Jellyfin-Plugin-SSO-Auth +{version} (https://github.com/9p4/jellyfin-plugin-sso)");
-
-                var avatarResponse = await client.GetAsync(avatarUrl);
-
-                if (!avatarResponse.Content.Headers.TryGetValues("content-type", out var contentTypeList))
-                {
-                    throw new Exception("Cannot get Content-Type of image : " + avatarUrl);
-                }
-
-                var contentType = contentTypeList.First();
-                if (!contentType.StartsWith("image"))
-                {
-                    throw new Exception("Content type of avatar URL is not an image, got :  " + contentType);
-                }
-
-                var extension = contentType.Split("/").Last();
-                var stream = await avatarResponse.Content.ReadAsStreamAsync();
-
-                if (user != null)
-                {
-                    var userDataPath =
-                        Path.Combine(
-                            _serverConfigurationManager.ApplicationPaths.UserConfigurationDirectoryPath,
-                            user.Username);
-                    if (user.ProfileImage is not null)
-                    {
-                        await _userManager.ClearProfileImageAsync(user).ConfigureAwait(false);
-                    }
-
-                    user.ProfileImage = new ImageInfo(Path.Combine(userDataPath, "profile" + extension));
-
-                    await _providerManager.SaveImage(stream, contentType, user.ProfileImage.Path)
-                        .ConfigureAwait(false);
-                }
-            }
-            catch (Exception e)
-            {
-                _logger.LogError(e.Message);
             }
         }
 
@@ -1372,7 +922,6 @@ public class TimedAuthorizeState
         IsLinking = false;
         EnableLiveTv = false;
         EnableLiveTvManagement = false;
-        AvatarURL = null;
     }
 
     /// <summary>
@@ -1420,9 +969,4 @@ public class TimedAuthorizeState
     /// Gets or sets a value indicating whether the user is allowed to manage live TV.
     /// </summary>
     public bool EnableLiveTvManagement { get; set; }
-
-    /// <summary>
-    /// Gets or sets the user avatar url.
-    /// </summary>
-    public string AvatarURL { get; set; }
 }

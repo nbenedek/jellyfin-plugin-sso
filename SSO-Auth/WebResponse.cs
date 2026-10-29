@@ -407,10 +407,10 @@ const sleep = (milliseconds) => {
     /// <summary>
     /// A generator for the web response that incorporates the data from the server.
     /// </summary>
-    /// <param name="data">The data of the auth flow. Is signed XML for SAML and a state ID for OpenID.</param>
+    /// <param name="data">The OpenID state ID for the authentication flow.</param>
     /// <param name="provider">The name of the provider to callback to.</param>
     /// <param name="baseUrl">The base URL of the Jellyfin installation.</param>
-    /// <param name="mode">The mode of the function; SAML or OID.</param>
+    /// <param name="mode">The OIDC route prefix. Currently OID.</param>
     /// <param name="isLinking">Whether or not this request is to link accounts (Rather than authenticate).</param>
     /// <returns>A string with the HTML to serve to the client.</returns>
     public static string Generator(string data, string provider, string baseUrl, string mode, bool isLinking = false)
