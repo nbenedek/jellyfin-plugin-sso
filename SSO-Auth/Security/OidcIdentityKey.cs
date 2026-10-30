@@ -44,6 +44,22 @@ public static class OidcIdentityKey
     }
 
     /// <summary>
+    /// Checks the syntax of an OIDC issuer. This does not authenticate the issuer.
+    /// </summary>
+    /// <param name="issuer">Issuer URL to validate.</param>
+    /// <returns>Whether the issuer is a usable HTTPS URL.</returns>
+    public static bool IsValidIssuer(string issuer)
+    {
+        return !string.IsNullOrWhiteSpace(issuer)
+            && issuer.Length <= 2048
+            && Uri.TryCreate(issuer, UriKind.Absolute, out var uri)
+            && string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
+            && string.IsNullOrEmpty(uri.Query)
+            && string.IsNullOrEmpty(uri.Fragment)
+            && string.IsNullOrEmpty(uri.UserInfo);
+    }
+
+    /// <summary>
     /// Extracts issuer and subject from an ID token that has already been validated by the OIDC client.
     /// This method does not validate signatures or token claims; callers MUST check OidcClient's
     /// ProcessResponseAsync result before calling it.
@@ -86,13 +102,7 @@ public static class OidcIdentityKey
 
             issuer = issuerElement.GetString();
             subject = subjectElement.GetString();
-            if (string.IsNullOrWhiteSpace(issuer)
-                || string.IsNullOrWhiteSpace(subject)
-                || !Uri.TryCreate(issuer, UriKind.Absolute, out var uri)
-                || !string.Equals(uri.Scheme, Uri.UriSchemeHttps, StringComparison.Ordinal)
-                || !string.IsNullOrEmpty(uri.Query)
-                || !string.IsNullOrEmpty(uri.Fragment)
-                || !string.IsNullOrEmpty(uri.UserInfo))
+            if (!IsValidIssuer(issuer) || string.IsNullOrWhiteSpace(subject))
             {
                 issuer = null;
                 subject = null;

@@ -28,7 +28,29 @@ This plugin allows users to sign in through an SSO provider (such as Google, Mic
 
 https://user-images.githubusercontent.com/17993169/149681516-f93b43f5-fa5c-4c1f-a909-e5414878a864.mp4
 
-Existing users may link new SSO accounts, or remove existing links using self-service at `/SSOViews/linking`.
+Existing Jellyfin accounts can be associated with OIDC identities **only by Jellyfin administrators**.
+Self-service linking and the public `/SSOViews/linking` page are disabled in this fork.
+Ordinary OIDC sign-in still uses `/sso/OID/start/PROVIDER_NAME`.
+
+### Administrator-only identity linking
+
+Open **Dashboard → Plugins → SSO-Auth → Administrator-only OIDC identity links**.
+Select the OIDC provider, then enter:
+
+1. **Jellyfin user ID:** The existing account's GUID from the Jellyfin dashboard.
+2. **OIDC issuer:** The exact HTTPS `iss` value of the provider's ID token (for Keycloak, normally the realm URL).
+3. **OIDC subject:** The immutable `sub` value (Keycloak's user ID, **not** the username).
+4. **Display username:** A human-readable label for this identity.
+
+Select **Create identity link**. The server requires elevated Jellyfin administrator
+authorization, refuses to reassign an identity already linked to a different user,
+and persists the mapping. **View existing links** lists and allows administrators
+to remove mappings for a selected Jellyfin user.
+
+This is an explicit administrative operation; it does not require the administrator
+to know the Keycloak user's password or trigger a public linking callback.
+Keep the issuer and subject exact: a mismatched value will not match the validated
+OIDC identity during login. Existing links remain intact across upgrades.
 
 ## Current State:
 
@@ -89,7 +111,7 @@ The nightly build may have new features unavailable in other builds, but **be wa
 - [ ] Automated tests
 - [x] Add role/claims support
 - [x] Use canonical usernames instead of preferred usernames
-- [x] Add user self-service
+- [x] Replace user self-service with administrator-only identity linking
 - [ ] Finalize RBAC access for all user properties
 
 ## Examples

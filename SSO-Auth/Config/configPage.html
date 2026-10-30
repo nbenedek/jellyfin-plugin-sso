@@ -44,22 +44,9 @@
             </a>
             for more information.
             <br />
-            To allow users to manage their own SSO accounts, including linking
-            SSO providers, and removing existing links, they need to visit
-            <a
-              is="emby-linkbutton"
-              id="sso-self-service-link"
-              class="button-link"
-              >the self service page </a
-            >. <br />
-            You can use
-            <a
-              is="emby-linkbutton"
-              href="https://jellyfin.org/docs/general/clients/web-config.html#custom-menu-links"
-              class="button-link"
-              >custom menu links
-            </a>
-            to accomplish this.
+            OIDC account linking is restricted to administrators. Use the
+            management section below to associate a Keycloak identity with an
+            existing Jellyfin account.
           </p>
 
           <form id="sso-load-config" class="esqConfigurationForm">
@@ -680,6 +667,88 @@
               </div>
             </div>
           </form>
+
+          <section class="verticalSection verticalSection-extrabottompadding">
+            <h2 class="sectionTitle">Administrator-only OIDC identity links</h2>
+            <p class="fieldDescription">
+              To migrate an existing account, enter its Jellyfin user ID and the
+              exact OIDC issuer and immutable subject from Keycloak. In
+              Keycloak, the subject is the user's ID, not their username.
+              Existing links remain in place until explicitly removed.
+            </p>
+            <div class="selectContainer">
+              <label class="selectLabel" for="sso-link-provider"
+                >OIDC provider</label
+              >
+              <select
+                id="sso-link-provider"
+                is="emby-select"
+                class="emby-select-withcolor emby-select"
+              ></select>
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel" for="sso-link-user-id"
+                >Jellyfin user ID (GUID)</label
+              >
+              <input
+                id="sso-link-user-id"
+                is="emby-input"
+                type="text"
+                autocomplete="off"
+              />
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel" for="sso-link-issuer"
+                >OIDC issuer (exact HTTPS URL)</label
+              >
+              <input
+                id="sso-link-issuer"
+                is="emby-input"
+                type="url"
+                autocomplete="off"
+              />
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel" for="sso-link-subject"
+                >OIDC subject (Keycloak user ID)</label
+              >
+              <input
+                id="sso-link-subject"
+                is="emby-input"
+                type="text"
+                autocomplete="off"
+              />
+            </div>
+            <div class="inputContainer">
+              <label class="inputLabel" for="sso-link-username"
+                >Display username</label
+              >
+              <input
+                id="sso-link-username"
+                is="emby-input"
+                type="text"
+                autocomplete="off"
+              />
+            </div>
+            <button
+              id="sso-admin-link-add"
+              type="button"
+              is="emby-button"
+              class="raised button-submit emby-button"
+            >
+              Create identity link
+            </button>
+            <button
+              id="sso-admin-link-list"
+              type="button"
+              is="emby-button"
+              class="raised emby-button"
+            >
+              View existing links
+            </button>
+            <p id="sso-admin-link-status" role="status" aria-live="polite"></p>
+            <div id="sso-admin-link-results"></div>
+          </section>
         </div>
       </div>
     </div>

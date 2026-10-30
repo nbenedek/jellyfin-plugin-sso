@@ -13,12 +13,10 @@ using Jellyfin.Data;
 using Jellyfin.Database.Implementations.Entities;
 using Jellyfin.Database.Implementations.Enums;
 using Jellyfin.Plugin.SSO_Auth.Config;
-using Jellyfin.Plugin.SSO_Auth.Helpers;
 using Jellyfin.Plugin.SSO_Auth.Security;
 using MediaBrowser.Common.Api;
 using MediaBrowser.Controller.Authentication;
 using MediaBrowser.Controller.Library;
-using MediaBrowser.Controller.Net;
 using MediaBrowser.Controller.Session;
 using MediaBrowser.Model.Cryptography;
 using Microsoft.AspNetCore.Authorization;
@@ -41,7 +39,6 @@ public class SSOController : ControllerBase
 
     private readonly IUserManager _userManager;
     private readonly ISessionManager _sessionManager;
-    private readonly IAuthorizationContext _authContext;
     private readonly ILogger<SSOController> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ICryptoProvider _cryptoProvider;
@@ -54,7 +51,6 @@ public class SSOController : ControllerBase
     /// <param name="logger">Instance of the <see cref="ILogger{SSOController}"/> interface.</param>
     /// <param name="loggerFactory">Instance of the <see cref="ILoggerFactory"/> interface.</param>
     /// <param name="sessionManager">Instance of the <see cref="ISessionManager"/> interface.</param>
-    /// <param name="authContext">Instance of the <see cref="IAuthorizationContext"/> interface.</param>
     /// <param name="userManager">Instance of the <see cref="IUserManager"/> interface.</param>
     /// <param name="cryptoProvider">Instance of the <see cref="ICryptoProvider"/> interface.</param>
     /// <param name="httpClientFactory">Instance of the <see cref="IHttpClientFactory"/> interface.</param>
@@ -64,14 +60,12 @@ public class SSOController : ControllerBase
         ILoggerFactory loggerFactory,
         ISessionManager sessionManager,
         IUserManager userManager,
-        IAuthorizationContext authContext,
         ICryptoProvider cryptoProvider,
         IHttpClientFactory httpClientFactory,
         OidcLoginTransactionStore transactionStore)
     {
         _sessionManager = sessionManager;
         _userManager = userManager;
-        _authContext = authContext;
         _cryptoProvider = cryptoProvider;
         _logger = logger;
         _loggerFactory = loggerFactory;
@@ -326,8 +320,6 @@ public class SSOController : ControllerBase
                 }
             }
 
-            bool isLinking = transaction.Purpose == OidcLoginPurpose.Link;
-
             if (isValid && string.IsNullOrWhiteSpace(username))
             {
                 return ReturnError(StatusCodes.Status400BadRequest, "OIDC response did not contain a usable username claim");
@@ -349,8 +341,8 @@ public class SSOController : ControllerBase
                     return BadRequest("Invalid or expired state");
                 }
 
-                _logger.LogInformation("OIDC callback validated for provider {Provider}; linking={IsLinking}", provider, isLinking);
-                return Content(WebResponse.Generator(data: exchangeToken, provider: provider, baseUrl: GetRequestBase(config.SchemeOverride, config.PortOverride), mode: "OID", isLinking: isLinking), MediaTypeNames.Text.Html);
+                _logger.LogInformation("OIDC callback validated for provider {Provider}", provider);
+                return Content(WebResponse.Generator(data: exchangeToken, provider: provider, baseUrl: GetRequestBase(config.SchemeOverride, config.PortOverride), mode: "OID"), MediaTypeNames.Text.Html);
             }
             else
             {
@@ -378,6 +370,11 @@ public class SSOController : ControllerBase
     [HttpGet("OID/start/{provider}")]
     public async Task<ActionResult> OidChallenge(string provider, [FromQuery] bool isLinking = false)
     {
+        if (isLinking)
+        {
+            return StatusCode(StatusCodes.Status403Forbidden, "Self-service OIDC linking is disabled.");
+        }
+
         OidConfig config;
         try
         {
@@ -429,7 +426,7 @@ public class SSOController : ControllerBase
             _transactionStore.Register(
                 provider,
                 state,
-                isLinking ? OidcLoginPurpose.Link : OidcLoginPurpose.Authenticate);
+                OidcLoginPurpose.Authenticate);
 
             return Redirect(state.StartUrl);
         }
@@ -613,30 +610,52 @@ public class SSOController : ControllerBase
     }
 
     /// <summary>
-    /// Create a canonical link for a given user. Must be performed by the user being changed, or admin.
+    /// Administratively associates an OIDC issuer and subject with an existing Jellyfin user.
     /// </summary>
-    /// <param name="mode">The mode of the function; currently only OID is supported.</param>
-    /// <param name="provider">The name of the provider to link to a jellyfin account.</param>
-    /// <param name="jellyfinUserId">The user ID within jellyfin to link to the provider.</param>
-    /// <param name="authResponse">The client information to authenticate the user with.</param>
-    /// <returns>Whether this API endpoint succeeded.</returns>
-    [Authorize]
-    [HttpPost("{mode}/Link/{provider}/{jellyfinUserId}")]
+    /// <param name="provider">Configured OIDC provider.</param>
+    /// <param name="jellyfinUserId">Existing Jellyfin account to associate.</param>
+    /// <param name="request">Issuer, subject, and display name entered by the administrator.</param>
+    /// <returns>204 on success, or an error for invalid or conflicting mappings.</returns>
+    [Authorize(Policy = Policies.RequiresElevation)]
+    [HttpPost("oid/Link/{provider}/{jellyfinUserId}")]
     [Consumes(MediaTypeNames.Application.Json)]
-    [Produces(MediaTypeNames.Application.Json)]
-    public async Task<ActionResult> AddCanonicalLink([FromRoute] string mode, [FromRoute] string provider, [FromRoute] Guid jellyfinUserId, [FromBody] AuthResponse authResponse)
+    public async Task<ActionResult> AddCanonicalLink(
+        [FromRoute] string provider,
+        [FromRoute] Guid jellyfinUserId,
+        [FromBody] AdminOidcLinkRequest request)
     {
-        if (!await RequestHelpers.AssertCanUpdateUser(_authContext, HttpContext.Request, jellyfinUserId, true).ConfigureAwait(false))
+        if (request is null || !request.IsValid())
         {
-            return StatusCode(StatusCodes.Status403Forbidden, "User is not allowed to link SSO providers.");
+            return BadRequest("A valid HTTPS issuer, subject, and display username are required.");
         }
 
-        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
+        if (jellyfinUserId == Guid.Empty || _userManager.GetUserById(jellyfinUserId) is null)
         {
-            throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
+            return NotFound("Target Jellyfin user does not exist.");
         }
 
-        return await OidLink(provider, jellyfinUserId, authResponse).ConfigureAwait(false);
+        await IdentityGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var configuration = SSOPlugin.Instance.Configuration;
+            if (!configuration.OidConfigs.TryGetValue(provider, out var config) || !config.Enabled)
+            {
+                return NotFound("Unknown or disabled OIDC provider.");
+            }
+
+            var identityKey = OidcIdentityKey.Create(request.Issuer, request.Subject);
+            if (!OidcIdentityLinks.TryLink(config, identityKey, request.Username, jellyfinUserId))
+            {
+                return Conflict("This OIDC identity is already linked to another Jellyfin user.");
+            }
+
+            SSOPlugin.Instance.UpdateConfiguration(configuration);
+            return NoContent();
+        }
+        finally
+        {
+            IdentityGate.Release();
+        }
     }
 
     /// <summary>
@@ -647,17 +666,12 @@ public class SSOController : ControllerBase
     /// <param name="jellyfinUserId">The user ID within jellyfin to unlink from the provider.</param>
     /// <param name="canonicalName">The user ID within jellyfin to unlink.</param>
     /// <returns>Whether this API endpoint succeeded.</returns>
-    [Authorize]
+    [Authorize(Policy = Policies.RequiresElevation)]
     [HttpDelete("{mode}/Link/{provider}/{jellyfinUserId}/{canonicalName}")]
     [Consumes(MediaTypeNames.Application.Json)]
     [Produces(MediaTypeNames.Application.Json)]
     public async Task<ActionResult> DeleteCanonicalLink([FromRoute] string mode, [FromRoute] string provider, [FromRoute] Guid jellyfinUserId, [FromRoute] string canonicalName)
     {
-        if (!await RequestHelpers.AssertCanUpdateUser(_authContext, HttpContext.Request, jellyfinUserId, true).ConfigureAwait(false))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, "Current user is not allowed to unlink SSO providers for user ID.");
-        }
-
         if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
         {
             return BadRequest("Only OIDC links are supported.");
@@ -697,16 +711,11 @@ public class SSOController : ControllerBase
     /// </summary>
     /// <param name="jellyfinUserId">The user ID within jellyfin for which to return the links.</param>
     /// <returns>A dictionary of provider : link mappings.</returns>
-    [Authorize]
+    [Authorize(Policy = Policies.RequiresElevation)]
     [HttpGet("oid/links/{jellyfinUserId}")]
     [Produces(MediaTypeNames.Application.Json)]
     public async Task<ActionResult<SerializableDictionary<string, IEnumerable<string>>>> GetOidLinksByUser(Guid jellyfinUserId)
     {
-        if (!await RequestHelpers.AssertCanUpdateUser(_authContext, HttpContext.Request, jellyfinUserId, true).ConfigureAwait(false))
-        {
-            return StatusCode(StatusCodes.Status403Forbidden, "Non-admin is not allowed to query other user's mappings.");
-        }
-
         var mappings = new SerializableDictionary<string, IEnumerable<string>>();
         var providerList = SSOPlugin.Instance.Configuration.OidConfigs;
 
@@ -716,55 +725,6 @@ public class SSOController : ControllerBase
         }
 
         return mappings;
-    }
-
-    /// <summary>
-    /// Validate an OIDC link request and create the link if it is valid.
-    /// </summary>
-    /// <param name="provider">The provider to authenticate against.</param>
-    /// <param name="jellyfinUserId">
-    ///   The ID of the account to be linked to the provider.
-    ///   Must be performed by this user, or an admin.
-    /// </param>
-    /// <param name="response">The data passed to the client to ensure it is the right one.</param>
-    /// <returns>JSON for the client to populate information with.</returns>
-    [Consumes(MediaTypeNames.Application.Json)]
-    [Produces(MediaTypeNames.Application.Json)]
-    private async Task<ActionResult> OidLink(string provider, Guid jellyfinUserId, AuthResponse response)
-    {
-        // The public caller has already passed [Authorize] and AssertCanUpdateUser.
-        await IdentityGate.WaitAsync().ConfigureAwait(false);
-        try
-        {
-            var configuration = SSOPlugin.Instance.Configuration;
-            if (!configuration.OidConfigs.TryGetValue(provider, out var config) || !config.Enabled)
-            {
-                return BadRequest("No matching provider found");
-            }
-
-            if (_userManager.GetUserById(jellyfinUserId) is null)
-            {
-                return NotFound("Target Jellyfin user does not exist.");
-            }
-
-            if (!_transactionStore.TryConsume(provider, response.Data, OidcLoginPurpose.Link, out var transaction))
-            {
-                return Unauthorized("Invalid, expired, or already-used linking transaction");
-            }
-
-            var login = transaction.ValidatedLogin;
-            if (!OidcIdentityLinks.TryLink(config, login.IdentityKey, login.Username, jellyfinUserId))
-            {
-                return Conflict("This OIDC identity is already linked to another Jellyfin user.");
-            }
-
-            SSOPlugin.Instance.UpdateConfiguration(configuration);
-            return NoContent();
-        }
-        finally
-        {
-            IdentityGate.Release();
-        }
     }
 
     /// <summary>
