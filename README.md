@@ -249,7 +249,6 @@ so that it refers to your fork.
 
 Much thanks to the [Jellyfin LDAP plugin](https://github.com/jellyfin/jellyfin-plugin-ldapauth) for offering a base for me to start on my plugin.
 
-
 I use the [Duende IdentityModel OIDC Client](https://github.com/DuendeSoftware/foss) library for the OpenID side of things.
 
 Thanks to these projects, without which I would have been pulling my hair out implementing these protocols from scratch.

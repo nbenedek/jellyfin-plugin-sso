@@ -218,7 +218,7 @@ pocketid:
   EnableAuthorization: true # (optional) If you want Jellyfin to read group permissions from pocket id
   RoleClaim: groups # (optional) If you want Jellyfin to be able to read group assignments from pocket id
   AdminRoles: admin # (optional) The pocket id group which will give a user Jellyfin admin privilges
-  Roles: users  # (optional) The pocket id group which will give a user Jellyfin access
+  Roles: users # (optional) The pocket id group which will give a user Jellyfin access
 ```
 
 ## Kanidm
