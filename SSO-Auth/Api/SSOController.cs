@@ -6,6 +6,7 @@ using System.Net.Mime;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using Duende.IdentityModel.OidcClient;
 using Jellyfin.Data;
@@ -36,6 +37,8 @@ namespace Jellyfin.Plugin.SSO_Auth.Api;
 [Route("[controller]")]
 public class SSOController : ControllerBase
 {
+    private static readonly SemaphoreSlim IdentityGate = new(1, 1);
+
     private readonly IUserManager _userManager;
     private readonly ISessionManager _sessionManager;
     private readonly IAuthorizationContext _authContext;
@@ -144,6 +147,19 @@ public class SSOController : ControllerBase
             if (result.IsError)
             {
                 return ReturnError(StatusCodes.Status400BadRequest, $"Error logging in: {result.Error} - {result.ErrorDescription}");
+            }
+
+            // ProcessResponseAsync has already validated the ID token. The issuer and subject
+            // must come from that token, not from optional UserInfo/display claims.
+            if (!OidcIdentityKey.TryReadValidatedToken(result.IdentityToken, out var issuer, out var subject))
+            {
+                return ReturnError(StatusCodes.Status401Unauthorized, "OIDC identity token has no usable issuer or subject");
+            }
+
+            var principalSubject = result.User?.FindFirst("sub")?.Value;
+            if (principalSubject != null && !string.Equals(principalSubject, subject, StringComparison.Ordinal))
+            {
+                return ReturnError(StatusCodes.Status401Unauthorized, "OIDC identity subject mismatch");
             }
 
             var folders = !config.EnableFolderRoles && config.EnabledFolders != null
@@ -320,6 +336,8 @@ public class SSOController : ControllerBase
             if (isValid)
             {
                 var validatedLogin = new OidcValidatedLogin(
+                    issuer,
+                    subject,
                     username,
                     isAdmin,
                     folders.ToArray(),
@@ -499,7 +517,11 @@ public class SSOController : ControllerBase
         }
 
         var login = transaction.ValidatedLogin;
-        Guid userId = await CreateCanonicalLinkAndUserIfNotExist("oid", provider, login.Username);
+        Guid userId = await ResolveOidcIdentityAsync(provider, login).ConfigureAwait(false);
+        if (userId == Guid.Empty)
+        {
+            return Conflict("This account requires explicit owner-authorized SSO linking or migration.");
+        }
 
         var authenticationResult = await Authenticate(
             userId,
@@ -532,94 +554,62 @@ public class SSOController : ControllerBase
         return Ok();
     }
 
-    private SerializableDictionary<string, Guid> GetCanonicalLinks(string mode, string provider)
+    private async Task<Guid> ResolveOidcIdentityAsync(string provider, OidcValidatedLogin login)
     {
-        SerializableDictionary<string, Guid> links = null;
-
-        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
-        }
-
-        links = SSOPlugin.Instance.Configuration.OidConfigs[provider].CanonicalLinks;
-
-        if (links == null)
-        {
-            links = new SerializableDictionary<string, Guid>();
-        }
-
-        return links;
-    }
-
-    private async Task<Guid> CreateCanonicalLinkAndUserIfNotExist(string mode, string provider, string canonicalName)
-    {
-        User user = null;
-
-        // First try to get the user by its id in case it was already registered before
-        Guid userId = Guid.Empty;
+        await IdentityGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            userId = GetCanonicalLink(mode, provider, canonicalName);
-        }
-        catch (KeyNotFoundException)
-        {
-            userId = Guid.Empty;
-        }
+            var configuration = SSOPlugin.Instance.Configuration;
+            if (!configuration.OidConfigs.TryGetValue(provider, out var config) || !config.Enabled)
+            {
+                return Guid.Empty;
+            }
 
-        // No userId found? Let's try and find the user by name instead
-        if (userId == Guid.Empty)
-        {
-            user = _userManager.GetUserByName(canonicalName);
-        }
-        else
-        {
-            user = _userManager.GetUserById(userId);
-        }
+            var userId = OidcIdentityLinks.Find(config, login.IdentityKey);
+            if (userId != Guid.Empty)
+            {
+                if (_userManager.GetUserById(userId) is null)
+                {
+                    // A stale mapping must not silently create or claim another account.
+                    return Guid.Empty;
+                }
 
-        if (user == null)
-        {
-            _logger.LogInformation($"SSO user {canonicalName} doesn't exist, creating...");
-            user = await _userManager.CreateUserAsync(canonicalName).ConfigureAwait(false);
+                if (!config.SubjectNames.TryGetValue(login.IdentityKey, out var name)
+                    || !string.Equals(name, login.Username, StringComparison.Ordinal))
+                {
+                    config.SubjectNames[login.IdentityKey] = login.Username;
+                    SSOPlugin.Instance.UpdateConfiguration(configuration);
+                }
+
+                return userId;
+            }
+
+            // There must be no fallback to CanonicalLinks or GetUserByName for authentication.
+            // Users with pre-existing Jellyfin or legacy SSO accounts must explicitly link
+            // from a session authorized to modify that account.
+            if (_userManager.GetUserByName(login.Username) is not null
+                || config.CanonicalLinks.ContainsKey(login.Username))
+            {
+                return Guid.Empty;
+            }
+
+            var user = await _userManager.CreateUserAsync(login.Username).ConfigureAwait(false);
             user.AuthenticationProviderId = GetType().FullName;
-            // https://jonathancrozier.com/blog/how-to-generate-a-cryptographically-secure-random-string-in-dot-net-with-c-sharp
             user.Password = _cryptoProvider.CreatePasswordHash(Convert.ToBase64String(RandomNumberGenerator.GetBytes(64))).ToString();
+            await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
 
-            // Make sure there aren't any trailing existing links
-            var links = GetCanonicalLinks(mode, provider);
-            links.Remove(canonicalName);
-            UpdateCanonicalLinkConfig(links, mode, provider);
+            if (!OidcIdentityLinks.TryLink(config, login.IdentityKey, login.Username, user.Id))
+            {
+                return Guid.Empty;
+            }
+
+            SSOPlugin.Instance.UpdateConfiguration(configuration);
+            return user.Id;
         }
-
-        userId = Guid.Empty;
-        try
+        finally
         {
-            userId = GetCanonicalLink(mode, provider, canonicalName);
+            IdentityGate.Release();
         }
-        catch (KeyNotFoundException)
-        {
-            userId = Guid.Empty;
-        }
-
-        if (userId == Guid.Empty)
-        {
-            _logger.LogInformation("SSO user link doesn't exist, creating...");
-            userId = user.Id;
-            CreateCanonicalLink(mode, provider, userId, canonicalName);
-        }
-
-        return userId;
-    }
-
-    private Guid GetCanonicalLink(string mode, string provider, string canonicalName)
-    {
-        SerializableDictionary<string, Guid> links = null;
-        Guid userId = Guid.Empty;
-
-        links = GetCanonicalLinks(mode, provider);
-
-        userId = links[canonicalName];
-
-        return userId;
     }
 
     /// <summary>
@@ -646,7 +636,7 @@ public class SSOController : ControllerBase
             throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
         }
 
-        return OidLink(provider, jellyfinUserId, authResponse);
+        return await OidLink(provider, jellyfinUserId, authResponse).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -668,18 +658,38 @@ public class SSOController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, "Current user is not allowed to unlink SSO providers for user ID.");
         }
 
-        Guid linkedId = GetCanonicalLink(mode, provider, canonicalName);
-
-        if (linkedId != jellyfinUserId)
+        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
         {
-            return StatusCode(StatusCodes.Status409Conflict, "jellyfin UID does not match id registered to that canonical name.");
+            return BadRequest("Only OIDC links are supported.");
         }
 
-        var links = GetCanonicalLinks(mode, provider);
+        await IdentityGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var configuration = SSOPlugin.Instance.Configuration;
+            if (!configuration.OidConfigs.TryGetValue(provider, out var config))
+            {
+                return NotFound("Unknown OIDC provider.");
+            }
 
-        links.Remove(canonicalName);
+            var result = OidcIdentityLinks.Unlink(config, jellyfinUserId, canonicalName);
+            if (result == OidcUnlinkResult.Ambiguous)
+            {
+                return Conflict("Multiple OIDC identities have this display name.");
+            }
 
-        return UpdateCanonicalLinkConfig(links, mode, provider);
+            if (result == OidcUnlinkResult.NotFound)
+            {
+                return NotFound("No matching link owned by this user.");
+            }
+
+            SSOPlugin.Instance.UpdateConfiguration(configuration);
+            return NoContent();
+        }
+        finally
+        {
+            IdentityGate.Release();
+        }
     }
 
     /// <summary>
@@ -702,9 +712,7 @@ public class SSOController : ControllerBase
 
         foreach (var providerName in providerList.Keys)
         {
-            var canonLinks = providerList[providerName].CanonicalLinks;
-            var canonKeys = from link in canonLinks where link.Value == jellyfinUserId select link.Key;
-            mappings[providerName] = canonKeys;
+            mappings[providerName] = OidcIdentityLinks.ListNames(providerList[providerName], jellyfinUserId);
         }
 
         return mappings;
@@ -722,56 +730,41 @@ public class SSOController : ControllerBase
     /// <returns>JSON for the client to populate information with.</returns>
     [Consumes(MediaTypeNames.Application.Json)]
     [Produces(MediaTypeNames.Application.Json)]
-    private ActionResult OidLink(string provider, Guid jellyfinUserId, AuthResponse response)
+    private async Task<ActionResult> OidLink(string provider, Guid jellyfinUserId, AuthResponse response)
     {
-        OidConfig config;
+        // The public caller has already passed [Authorize] and AssertCanUpdateUser.
+        await IdentityGate.WaitAsync().ConfigureAwait(false);
         try
         {
-            config = SSOPlugin.Instance.Configuration.OidConfigs[provider];
+            var configuration = SSOPlugin.Instance.Configuration;
+            if (!configuration.OidConfigs.TryGetValue(provider, out var config) || !config.Enabled)
+            {
+                return BadRequest("No matching provider found");
+            }
+
+            if (_userManager.GetUserById(jellyfinUserId) is null)
+            {
+                return NotFound("Target Jellyfin user does not exist.");
+            }
+
+            if (!_transactionStore.TryConsume(provider, response.Data, OidcLoginPurpose.Link, out var transaction))
+            {
+                return Unauthorized("Invalid, expired, or already-used linking transaction");
+            }
+
+            var login = transaction.ValidatedLogin;
+            if (!OidcIdentityLinks.TryLink(config, login.IdentityKey, login.Username, jellyfinUserId))
+            {
+                return Conflict("This OIDC identity is already linked to another Jellyfin user.");
+            }
+
+            SSOPlugin.Instance.UpdateConfiguration(configuration);
+            return NoContent();
         }
-        catch (KeyNotFoundException)
+        finally
         {
-            return BadRequest("No matching provider found");
+            IdentityGate.Release();
         }
-
-        if (!_transactionStore.TryConsume(provider, response.Data, OidcLoginPurpose.Link, out var transaction))
-        {
-            return Unauthorized("Invalid, expired, or already-used linking transaction");
-        }
-
-        return CreateCanonicalLink("oid", provider, jellyfinUserId, transaction.ValidatedLogin.Username);
-    }
-
-    private ActionResult CreateCanonicalLink(string mode, string provider, [FromRoute] Guid jellyfinUserId, string providerUserId)
-    {
-        SerializableDictionary<string, Guid> links = null;
-        try
-        {
-            links = GetCanonicalLinks(mode, provider);
-        }
-        catch (KeyNotFoundException)
-        {
-            return BadRequest("No matching provider found");
-        }
-
-        links[providerUserId] = jellyfinUserId;
-        UpdateCanonicalLinkConfig(links, mode, provider);
-
-        return NoContent();
-    }
-
-    private OkResult UpdateCanonicalLinkConfig(SerializableDictionary<string, Guid> links, string mode, string provider)
-    {
-        var configuration = SSOPlugin.Instance.Configuration;
-        if (!mode.Equals("oid", StringComparison.OrdinalIgnoreCase))
-        {
-            throw new ArgumentException($"{mode} is not a valid OIDC mode", nameof(mode));
-        }
-
-        configuration.OidConfigs[provider].CanonicalLinks = links;
-
-        SSOPlugin.Instance.UpdateConfiguration(configuration);
-        return Ok();
     }
 
     /// <summary>

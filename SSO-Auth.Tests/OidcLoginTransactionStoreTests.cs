@@ -103,6 +103,8 @@ public sealed class OidcLoginTransactionStoreTests
 
     private static OidcValidatedLogin MakeValidatedLogin()
         => new(
+            "https://idp.example/realms/test",
+            "stable-subject-1",
             "benedek",
             false,
             Array.Empty<string>(),

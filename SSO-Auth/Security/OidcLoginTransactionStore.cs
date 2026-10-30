@@ -264,24 +264,41 @@ public sealed class OidcValidatedLogin
     /// <summary>
     /// Initializes a new instance of the <see cref="OidcValidatedLogin"/> class.
     /// </summary>
+    /// <param name="issuer">Issuer from a successfully validated OIDC ID token.</param>
+    /// <param name="subject">Subject from a successfully validated OIDC ID token.</param>
     /// <param name="username">Validated display username.</param>
     /// <param name="isAdministrator">Whether the user has administrator privileges.</param>
     /// <param name="folders">Permitted Jellyfin folders.</param>
     /// <param name="enableLiveTv">Whether Live TV access is enabled.</param>
     /// <param name="enableLiveTvManagement">Whether Live TV management is enabled.</param>
     public OidcValidatedLogin(
+        string issuer,
+        string subject,
         string username,
         bool isAdministrator,
         string[] folders,
         bool enableLiveTv,
         bool enableLiveTvManagement)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(issuer);
+        ArgumentException.ThrowIfNullOrWhiteSpace(subject);
+        Issuer = issuer;
+        Subject = subject;
         Username = username ?? throw new ArgumentNullException(nameof(username));
         IsAdministrator = isAdministrator;
         Folders = folders ?? Array.Empty<string>();
         EnableLiveTv = enableLiveTv;
         EnableLiveTvManagement = enableLiveTvManagement;
     }
+
+    /// <summary>Gets the validated OIDC issuer.</summary>
+    public string Issuer { get; }
+
+    /// <summary>Gets the validated OIDC subject.</summary>
+    public string Subject { get; }
+
+    /// <summary>Gets the opaque issuer-and-subject key.</summary>
+    public string IdentityKey => OidcIdentityKey.Create(Issuer, Subject);
 
     /// <summary>Gets the validated display username.</summary>
     public string Username { get; }

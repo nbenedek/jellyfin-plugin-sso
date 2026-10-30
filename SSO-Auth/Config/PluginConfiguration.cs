@@ -31,6 +31,8 @@ public class PluginConfiguration : MediaBrowser.Model.Plugins.BasePluginConfigur
 public class OidConfig
 {
     private SerializableDictionary<string, Guid> _canonicalLinks;
+    private SerializableDictionary<string, Guid> _subjectLinks;
+    private SerializableDictionary<string, string> _subjectNames;
 
     /// <summary>
     /// Gets or sets the OpenID well-known information endpoint.
@@ -155,6 +157,28 @@ public class OidConfig
             return _canonicalLinks;
         }
         set => _canonicalLinks = value;
+    }
+
+    /// <summary>
+    /// Gets or sets issuer-and-subject identity keys mapped to Jellyfin user IDs.
+    /// Unlike legacy canonical links, these values must never be matched by username.
+    /// </summary>
+    [XmlElement("SubjectLinks")]
+    public SerializableDictionary<string, Guid> SubjectLinks
+    {
+        get => _subjectLinks ??= new SerializableDictionary<string, Guid>();
+        set => _subjectLinks = value;
+    }
+
+    /// <summary>
+    /// Gets or sets display usernames for linked issuer-and-subject identity keys.
+    /// Display names are not used for authentication decisions.
+    /// </summary>
+    [XmlElement("SubjectNames")]
+    public SerializableDictionary<string, string> SubjectNames
+    {
+        get => _subjectNames ??= new SerializableDictionary<string, string>();
+        set => _subjectNames = value;
     }
 
     /// <summary>
