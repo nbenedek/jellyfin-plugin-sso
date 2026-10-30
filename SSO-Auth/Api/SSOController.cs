@@ -894,4 +894,3 @@ public class AuthResponse
     /// </summary>
     public string Data { get; set; }
 }
-
