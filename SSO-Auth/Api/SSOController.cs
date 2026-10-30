@@ -784,18 +784,41 @@ public class SSOController : ControllerBase
         User user = _userManager.GetUserById(userId);
         if (enableAuthorization)
         {
-            user.SetPermission(PermissionKind.IsAdministrator, isAdmin);
-            user.SetPermission(PermissionKind.EnableAllFolders, enableAllFolders);
-            if (!enableAllFolders)
+            // Jellyfin persists permission and preference rows through UpdatePolicyAsync.
+            // Updating the user entity alone can leave policy changes only in memory.
+            var policy = _userManager.GetUserDto(user).Policy;
+            OidcAuthorizationPolicy.Apply(
+                policy,
+                enableAuthorization,
+                isAdmin,
+                enableAllFolders,
+                enabledFolders,
+                enableLiveTv,
+                enableLiveTvAdmin);
+            OidcAuthorizationPolicy.PrepareForPersistence(
+                policy,
+                userId,
+                user.HasPermission(PermissionKind.EnableLyricManagement));
+
+            if (!string.IsNullOrEmpty(defaultProvider))
             {
-                user.SetPreference(PreferenceKind.EnabledFolders, enabledFolders);
+                policy.AuthenticationProviderId = defaultProvider;
             }
+
+            await _userManager.UpdatePolicyAsync(userId, policy).ConfigureAwait(false);
+            user = _userManager.GetUserById(userId);
+        }
+        else if (!string.IsNullOrEmpty(defaultProvider))
+        {
+            // A disabled authorization provider must not rewrite any Jellyfin permissions.
+            user.AuthenticationProviderId = defaultProvider;
+            await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
         }
 
-        user.SetPermission(PermissionKind.EnableLiveTvAccess, enableLiveTv);
-        user.SetPermission(PermissionKind.EnableLiveTvManagement, enableLiveTvAdmin);
-
-        await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
+        if (!string.IsNullOrEmpty(defaultProvider))
+        {
+            _logger.LogInformation("Set default login provider to {Provider}", defaultProvider);
+        }
 
         var authRequest = new AuthenticationRequest();
         authRequest.UserId = user.Id;
@@ -805,12 +828,6 @@ public class SSOController : ControllerBase
         authRequest.DeviceId = authResponse.DeviceID;
         authRequest.DeviceName = authResponse.DeviceName;
         _logger.LogInformation("Auth request created...");
-        if (!string.IsNullOrEmpty(defaultProvider))
-        {
-            user.AuthenticationProviderId = defaultProvider;
-            await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
-            _logger.LogInformation("Set default login provider to " + defaultProvider);
-        }
 
         return await _sessionManager.AuthenticateDirect(authRequest).ConfigureAwait(false);
     }
