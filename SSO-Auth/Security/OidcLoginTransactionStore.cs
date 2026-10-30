@@ -12,6 +12,7 @@ public enum OidcLoginPurpose
 {
     /// <summary>Authenticates the validated identity.</summary>
     Authenticate = 0,
+
     /// <summary>Links the validated identity to an existing Jellyfin account.</summary>
     Link = 1
 }
@@ -23,8 +24,10 @@ public enum OidcLoginTransactionStatus
 {
     /// <summary>Awaiting the OIDC callback.</summary>
     PendingCallback = 0,
+
     /// <summary>Validated and available for a single exchange.</summary>
     ReadyForExchange = 1,
+
     /// <summary>The exchange token has already been consumed.</summary>
     Consumed = 2
 }
@@ -283,16 +286,16 @@ public sealed class OidcValidatedLogin
     /// <summary>Gets the validated display username.</summary>
     public string Username { get; }
 
-    /// <summary>Gets whether administrator privileges were granted.</summary>
+    /// <summary>Gets a value indicating whether administrator privileges were granted.</summary>
     public bool IsAdministrator { get; }
 
     /// <summary>Gets the validated folder permissions.</summary>
     public string[] Folders { get; }
 
-    /// <summary>Gets whether Live TV access is enabled.</summary>
+    /// <summary>Gets a value indicating whether Live TV access is enabled.</summary>
     public bool EnableLiveTv { get; }
 
-    /// <summary>Gets whether Live TV management is enabled.</summary>
+    /// <summary>Gets a value indicating whether Live TV management is enabled.</summary>
     public bool EnableLiveTvManagement { get; }
 }
 
