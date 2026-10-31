@@ -71,7 +71,7 @@ automatically injecting visual styling.
 - [x] Run native .NET dry run against **recovered actual** development Jellyfin instance configuration (user confirmed).
 - [x] Migrate one reviewed legacy account and verify functionality on development Jellyfin instance (user confirmed).
 - [x] Complete the two legacy Keycloak account migrations on development Jellyfin instance (user confirmed).
-- [x] Verify migrated users remain linked after an SSO settings edit and Jellyfin restart (Stage 6 live acceptance, 2026-10-31).
+- [x] Verify migrated users remain linked after settings edit and restart.
 - [ ] Review any remaining unmigrated users before production promotion.
 
 The Jellyfin Dashboard remains uncluttered: Stage 6 concerns regular SSO
