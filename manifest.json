@@ -1,0 +1,20 @@
+[
+  {
+    "category": "Authentication",
+    "description": "Sign in using an OpenID Connect provider. Includes verified issuer/subject identity links, administrator-controlled linking, and a secure sign-in flow.\nReview documentation at https://github.com/nbenedek/jellyfin-plugin-sso",
+    "guid": "505ce9d1-d916-42fa-86ca-673ef241d7df",
+    "name": "SSO Authentication",
+    "overview": "OIDC-only authentication for Jellyfin 10.11 with secure identity linking.",
+    "owner": "nbenedek",
+    "versions": [
+      {
+        "changelog": "# Changelog\n\nThis changelog describes the actively maintained OIDC-only fork. Earlier releases and historical SAML functionality belong to the archived [upstream project](https://github.com/9p4/jellyfin-plugin-sso), not to the current fork.\n\n## 4.1.0.0 — OIDC-only security and usability release (2026-10-31)\n\n### Authentication and identity\n\n- Replaced legacy sign-in handling with expiring, one-time, provider-bound OIDC login transactions and replay-resistant exchange tokens.\n- Use validated issuer (`iss`) and subject (`sub`) as persistent identity keys instead of relying on a mutable username.\n- Restrict creating, reviewing and deleting identity links to authenticated Jellyfin administrators; disable public self-service account linking.\n- Enforce provider configuration and access restrictions on the backend.\n- Fail closed on malformed nested role claims rather than leaking errors or silently widening authorization.\n\n### Authorization and stability\n\n- Preserve existing `SubjectLinks`, `SubjectNames` and `CanonicalLinks` when provider settings are edited.\n- Preserve manually configured Jellyfin library permissions when SSO-managed authorization is disabled.\n- Fix authorization behavior across Jellyfin service restarts, with regression and live validation.\n- Keep native Jellyfin administrator sign-in available for recovery.\n\n### Administration and maintainability\n\n- Modernize Jellyfin's administrator configuration page, including native navigation and expandable advanced settings.\n- Refactor shared OIDC configuration and role-claim interpretation to reduce duplicated code.\n- Retire the unsafe Python XML migration writer. Retain a separate, tested .NET 9 **Keycloak-specific** offline migration utility; it is not bundled into the runtime plugin.\n\n### Packaging and verification\n\n- Target Jellyfin 10.11.x and .NET 9; versioned assembly and `meta.json`.\n- Include the plugin DLL and its two OIDC dependencies in the runtime ZIP.\n- Add package structure/metadata regression checks and SHA-256 checksum generation to CI.\n- Automated build, security regression and UI tests completed; the operator also accepted the development instance's live sign-in, client, restart and permission checks.\n\n### Upgrade notes\n\nBack up both the installed plugin directory and `plugins/configurations/SSO-Auth.xml`. Replace the **entire** versioned plugin package, not only `SSO-Auth.dll`. Do not run two versions simultaneously. Keep the configuration and identity mappings intact. No stable GitHub plugin repository manifest has yet been published for automatic installation.\n\nSee [Release candidate / installation guidance](docs/RELEASE-CANDIDATE.md).\n",
+        "checksum": "0a47137be5f3eff0a4b642284f68985a",
+        "sourceUrl": "https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.1.0.0/sso-authentication_4.1.0.0.zip",
+        "targetAbi": "10.11.0.0",
+        "timestamp": "2026-10-31T22:43:31Z",
+        "version": "4.1.0.0"
+      }
+    ]
+  }
+]
