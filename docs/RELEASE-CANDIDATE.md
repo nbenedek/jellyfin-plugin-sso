@@ -3,7 +3,9 @@
 **Status:** code and release packaging prepared; live acceptance and production
 promotion remain gated. This is an OIDC-only fork targeting Jellyfin 10.11.x
 and .NET 9. No automatic production installation or repository publication
-occurs from development-branch builds.
+occurs from development-branch builds. Legacy nightly publication now requires
+an explicit manual workflow invocation; a production release requires an
+explicit GitHub Release publication.
 
 ## What changed
 
@@ -37,7 +39,7 @@ is not a production release.
 ## Development installation
 
 Work on a nonproduction Jellyfin server. Record the artifact's commit SHA.
-Before replacing any files, locate the *actual* plugin directory and config
+Before replacing any files, locate the _actual_ plugin directory and config
 path. Do not assume the configuration belongs inside the plugin directory.
 
 ```bash

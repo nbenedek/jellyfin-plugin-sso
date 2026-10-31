@@ -1,9 +1,10 @@
 name: Publish Nightly
 
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -11,23 +12,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
       with:
         dotnet-version: 9.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build Dotnet
       run: dotnet build --no-restore --warnaserror
-    - name: "Flag as nightly in build.yaml"
-      uses: fjogeleit/yaml-update-action@v0.10.0
-      with:
-        valueFile: 'build.yaml'
-        propertyPath: 'version'
-        value: "0.0.0.9000"
-        commitChange: false
-        updateFile: true
+    - name: Flag as nightly in build.yaml
+      run: |
+        sed -i 's/^version: .*/version: "0.0.0.9000"/' build.yaml
     - name: "JPRM: Build"
       id: jrpm
       uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d # v1.1.1
@@ -50,7 +46,7 @@ jobs:
       id: publish-assets
       uses: softprops/action-gh-release@50195ba7f6f93d1ac97ba8332a178e008ad176aa
       with:
-          prerelease: false
+          prerelease: true
           fail_on_unmatched_files: true
           tag_name: nightly
           files: |

@@ -4,16 +4,16 @@ This file tracks the `dev/oidc-security-refactor` branch. Jellyfin 10.11.6 is
 the primary development target. Stage acceptance requires both automated
 regression tests and live validation on development Jellyfin instance.
 
-| Stage | Scope                                                                             | Status                                               |
-| ----- | --------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                             |
-| 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                             |
-| 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                            |
-| 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                            |
-| 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                            |
-| 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed)   |
-| 7     | Legacy code cleanup and dependency reduction                                      | Code complete; full live regression pending          |
-| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Release candidate prepared; promotion gated          |
+| Stage | Scope                                                                             | Status                                             |
+| ----- | --------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                           |
+| 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                           |
+| 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                          |
+| 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                          |
+| 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                          |
+| 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed) |
+| 7     | Legacy code cleanup and dependency reduction                                      | Code complete; full live regression pending        |
+| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Release candidate prepared; promotion gated        |
 
 ## Stage 4 acceptance
 
