@@ -25,8 +25,8 @@
           <p class="fieldDescription sso-overview">
             Configure OpenID Connect sign-in providers. Changes to existing
             account links are administrator-controlled; usernames alone never
-            establish account ownership. A Jellyfin restart may be needed
-            after changing a provider.
+            establish account ownership. A Jellyfin restart may be needed after
+            changing a provider.
           </p>
           <p class="fieldDescription">
             Native Jellyfin administrator login remains available for recovery.
@@ -41,7 +41,8 @@
               <div class="collapseContent">
                 <div class="selectContainer">
                   <label class="selectLabel" for="selectProvider"
-                    >Provider:</label>
+                    >Provider:</label
+                  >
                   <select
                     is="emby-select"
                     id="selectProvider"
@@ -127,7 +128,8 @@
                     class="sso-text"
                   />
                   <div class="fieldDescription">
-                    Enter the HTTPS issuer URL (not the .well-known JSON URL). It must support OIDC discovery.
+                    Enter the HTTPS issuer URL (not the .well-known JSON URL).
+                    It must support OIDC discovery.
                   </div>
                 </div>
 
@@ -168,10 +170,12 @@
                     class="raised emby-button sso-secret-toggle"
                     aria-controls="OidSecret"
                     aria-pressed="false"
-                  >Show secret</button>
+                  >
+                    Show secret
+                  </button>
                   <div class="fieldDescription">
-                    Stored client secret. Leave unchanged to preserve it; new providers require a secret.
-                    Avoid screenshots of this field.
+                    Stored client secret. Leave unchanged to preserve it; new
+                    providers require a secret. Avoid screenshots of this field.
                   </div>
                 </div>
 
@@ -339,323 +343,344 @@
                 </div>
 
                 <details class="sso-advanced-options">
-                  <summary>Advanced settings: Live TV, claims, scopes and compatibility</summary>
-                  <p class="fieldDescription">Only change these options if your identity provider requires them. Existing values are preserved when loading a provider.</p>
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableLiveTvRoles"
-                      name="EnableLiveTvRoles"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Live TV RBAC</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines whether the roles will be used to grant Live TV
-                    privileges.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="LiveTvRoles"
-                    >Live TV Roles:</label
+                  <summary>
+                    Advanced settings: Live TV, claims, scopes and compatibility
+                  </summary>
+                  <p class="fieldDescription">
+                    Only change these options if your identity provider requires
+                    them. Existing values are preserved when loading a provider.
+                  </p>
+                  <div
+                    class="checkboxContainer checkboxContainer-withDescription"
                   >
-                  <textarea
-                    is="emby-textarea"
-                    id="LiveTvRoles"
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    A list of roles, one role per-line to look for in the OpenID
-                    response.
-                    <br />
-                    Like <strong>"Roles"</strong>, but having any of the roles
-                    confers Live TV privileges.
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="EnableLiveTvRoles"
+                        name="EnableLiveTvRoles"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Enable Live TV RBAC</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                      Determines whether the roles will be used to grant Live TV
+                      privileges.
+                    </div>
                   </div>
-                </div>
 
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="LiveTvManagementRoles"
-                    >Live TV Management Roles:</label
-                  >
-                  <textarea
-                    is="emby-textarea"
-                    id="LiveTvManagementRoles"
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    A list of roles, one role per-line to look for in the OpenID
-                    response.
-                    <br />
-                    Like <strong>"Roles"</strong>, but having any of the roles
-                    confers Live TV administration privileges.
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableLiveTv"
-                      name="EnableLiveTv"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Live TV Access By Default</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines whether the user can view Live TV by default.
-                    <br />
-                    This value is still used if <strong>Live TV RBAC</strong> is
-                    enabled!
-                  </div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="EnableLiveTvManagement"
-                      name="EnableLiveTvManagement"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Enable Live TV Management By Default</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    Determines whether the user can manage Live TV by default.
-                    <br />
-                    This value is still used if <strong>Live TV RBAC</strong> is
-                    enabled!
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="RoleClaim"
-                    >Role Claim:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="RoleClaim"
-                    required=""
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    This is the value in the OpenID response to check for roles.
-                    The first element is the claim type, the subsequent values
-                    are to parse the JSON of the claim value. Use a
-                    <code>"\."</code> to denote a literal ".". This expects a
-                    list of strings from the OIDC server.
-                    <br />
-                    For Keycloak, it is <code>realm_access.roles</code> by
-                    default for realm roles. For client roles, it is
-                    <code>resource_access.&gt;clientId&lt;.roles</code>
-                    (e.g. resource_access.jellyfin.roles)
-                    <br />
-                    For Authelia, it is <code>groups</code>
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="OidScopes"
-                    >Request Additional Scopes:</label
-                  >
-                  <textarea
-                    is="emby-textarea"
-                    id="OidScopes"
-                    required=""
-                    type="text"
-                    class="sso-line-list emby-textarea"
-                  ></textarea>
-                  <div class="fieldDescription">
-                    Specify additional scopes to include in the OIDC request.
-                    <br />
-                    One scope per line, each line should contain a scope name to
-                    include in the OIDC request.
-                    <br />
-                    For some OIDC providers (For example,
-                    <a
-                      is="emby-linkbutton"
-                      href="https://github.com/9p4/jellyfin-plugin-sso/issues/23#issuecomment-1112237616"
-                      class="button-link"
-                      >authelia</a
-                    >), additional scopes may be required in order to validate
-                    group membership in role claim.
-                    <br />
-                    Leave blank to only request the default scopes.
-                  </div>
-                </div>
-
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="DefaultProvider"
-                    >Set default Provider:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="DefaultProvider"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The set provider then gets assigned to the user after they
-                    have logged in. If it is not set, nothing is changed. With
-                    this, a user can login with SSO but is still able to log in
-                    via other providers later.<br />A common option is
-                    <code
-                      >Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider</code
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="LiveTvRoles"
+                      >Live TV Roles:</label
                     >
-                    for the default provider.
+                    <textarea
+                      is="emby-textarea"
+                      id="LiveTvRoles"
+                      type="text"
+                      class="sso-line-list emby-textarea"
+                    ></textarea>
+                    <div class="fieldDescription">
+                      A list of roles, one role per-line to look for in the
+                      OpenID response.
+                      <br />
+                      Like <strong>"Roles"</strong>, but having any of the roles
+                      confers Live TV privileges.
+                    </div>
                   </div>
-                </div>
 
-                <div class="inputContainer">
-                  <label
-                    class="inputLabel inputLabelUnfocused"
-                    for="DefaultUsernameClaim"
-                    >Set default username claim:</label
-                  >
-                  <input
-                    is="emby-input"
-                    id="DefaultUsernameClaim"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    The default username claim to use from OpenID by default. If
-                    it is not set, it defaults to
-                    <code>preferred_username</code>.
-                  </div>
-                </div>
-
-                <div class="checkboxContainer">
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DisableHttps"
-                      name="DisableHttps"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Legacy HTTPS bypass (ignored)</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription"></div>
-                </div>
-
-                <div class="checkboxContainer">
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DisablePushedAuthorization"
-                      name="DisablePushedAuthorization"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span
-                      >Disable Pushed Authorization (Insecure). May be needed
-                      for Authelia.</span
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="LiveTvManagementRoles"
+                      >Live TV Management Roles:</label
                     >
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription"></div>
-                </div>
-
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DoNotValidateEndpoints"
-                      name="DoNotValidateEndpoints"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Do Not Validate OpenID Endpoints (Insecure)</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    May be required for Google OpenID
+                    <textarea
+                      is="emby-textarea"
+                      id="LiveTvManagementRoles"
+                      type="text"
+                      class="sso-line-list emby-textarea"
+                    ></textarea>
+                    <div class="fieldDescription">
+                      A list of roles, one role per-line to look for in the
+                      OpenID response.
+                      <br />
+                      Like <strong>"Roles"</strong>, but having any of the roles
+                      confers Live TV administration privileges.
+                    </div>
                   </div>
-                </div>
-                <div class="checkboxContainer">
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DoNotValidateIssuerName"
-                      name="DoNotValidateIssuerName"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Legacy issuer bypass (ignored)</span>
-                  </label>
-                </div>
-                <div
-                  class="checkboxContainer checkboxContainer-withDescription"
-                >
-                  <label>
-                    <input
-                      is="emby-checkbox"
-                      id="DoNotLoadProfile"
-                      name="DoNotLoadProfile"
-                      type="checkbox"
-                      class="sso-toggle"
-                    />
-                    <span>Do Not Load Profile Information</span>
-                  </label>
-                  <div class="fieldDescription checkboxFieldDescription">
-                    May be required for Cloudflare OpenID
-                  </div>
-                </div>
 
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="SchemeOverride"
-                    >Scheme Override</label
+                  <div
+                    class="checkboxContainer checkboxContainer-withDescription"
                   >
-                  <input
-                    is="emby-input"
-                    id="SchemeOverride"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    If the plugin is redirecting to an insecure URL, set this to
-                    "https"
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="EnableLiveTv"
+                        name="EnableLiveTv"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Enable Live TV Access By Default</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                      Determines whether the user can view Live TV by default.
+                      <br />
+                      This value is still used if
+                      <strong>Live TV RBAC</strong> is enabled!
+                    </div>
                   </div>
-                </div>
 
-                <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="PortOverride"
-                    >Port Override</label
+                  <div
+                    class="checkboxContainer checkboxContainer-withDescription"
                   >
-                  <input
-                    is="emby-input"
-                    id="PortOverride"
-                    type="text"
-                    class="sso-text"
-                  />
-                  <div class="fieldDescription">
-                    If the plugin is redirecting to an incorrect port, set this
-                    to the appropiate port
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="EnableLiveTvManagement"
+                        name="EnableLiveTvManagement"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Enable Live TV Management By Default</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                      Determines whether the user can manage Live TV by default.
+                      <br />
+                      This value is still used if
+                      <strong>Live TV RBAC</strong> is enabled!
+                    </div>
                   </div>
-                </div>
 
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="RoleClaim"
+                      >Role Claim:</label
+                    >
+                    <input
+                      is="emby-input"
+                      id="RoleClaim"
+                      required=""
+                      type="text"
+                      class="sso-text"
+                    />
+                    <div class="fieldDescription">
+                      This is the value in the OpenID response to check for
+                      roles. The first element is the claim type, the subsequent
+                      values are to parse the JSON of the claim value. Use a
+                      <code>"\."</code> to denote a literal ".". This expects a
+                      list of strings from the OIDC server.
+                      <br />
+                      For Keycloak, it is <code>realm_access.roles</code> by
+                      default for realm roles. For client roles, it is
+                      <code>resource_access.&gt;clientId&lt;.roles</code>
+                      (e.g. resource_access.jellyfin.roles)
+                      <br />
+                      For Authelia, it is <code>groups</code>
+                    </div>
+                  </div>
+
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="OidScopes"
+                      >Request Additional Scopes:</label
+                    >
+                    <textarea
+                      is="emby-textarea"
+                      id="OidScopes"
+                      required=""
+                      type="text"
+                      class="sso-line-list emby-textarea"
+                    ></textarea>
+                    <div class="fieldDescription">
+                      Specify additional scopes to include in the OIDC request.
+                      <br />
+                      One scope per line, each line should contain a scope name
+                      to include in the OIDC request.
+                      <br />
+                      For some OIDC providers (For example,
+                      <a
+                        is="emby-linkbutton"
+                        href="https://github.com/9p4/jellyfin-plugin-sso/issues/23#issuecomment-1112237616"
+                        class="button-link"
+                        >authelia</a
+                      >), additional scopes may be required in order to validate
+                      group membership in role claim.
+                      <br />
+                      Leave blank to only request the default scopes.
+                    </div>
+                  </div>
+
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="DefaultProvider"
+                      >Set default Provider:</label
+                    >
+                    <input
+                      is="emby-input"
+                      id="DefaultProvider"
+                      type="text"
+                      class="sso-text"
+                    />
+                    <div class="fieldDescription">
+                      The set provider then gets assigned to the user after they
+                      have logged in. If it is not set, nothing is changed. With
+                      this, a user can login with SSO but is still able to log
+                      in via other providers later.<br />A common option is
+                      <code
+                        >Jellyfin.Server.Implementations.Users.DefaultAuthenticationProvider</code
+                      >
+                      for the default provider.
+                    </div>
+                  </div>
+
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="DefaultUsernameClaim"
+                      >Set default username claim:</label
+                    >
+                    <input
+                      is="emby-input"
+                      id="DefaultUsernameClaim"
+                      type="text"
+                      class="sso-text"
+                    />
+                    <div class="fieldDescription">
+                      The default username claim to use from OpenID by default.
+                      If it is not set, it defaults to
+                      <code>preferred_username</code>.
+                    </div>
+                  </div>
+
+                  <div class="checkboxContainer">
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="DisableHttps"
+                        name="DisableHttps"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Legacy HTTPS bypass (ignored)</span>
+                    </label>
+                    <div
+                      class="fieldDescription checkboxFieldDescription"
+                    ></div>
+                  </div>
+
+                  <div class="checkboxContainer">
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="DisablePushedAuthorization"
+                        name="DisablePushedAuthorization"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span
+                        >Disable Pushed Authorization (Insecure). May be needed
+                        for Authelia.</span
+                      >
+                    </label>
+                    <div
+                      class="fieldDescription checkboxFieldDescription"
+                    ></div>
+                  </div>
+
+                  <div
+                    class="checkboxContainer checkboxContainer-withDescription"
+                  >
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="DoNotValidateEndpoints"
+                        name="DoNotValidateEndpoints"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Do Not Validate OpenID Endpoints (Insecure)</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                      May be required for Google OpenID
+                    </div>
+                  </div>
+                  <div class="checkboxContainer">
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="DoNotValidateIssuerName"
+                        name="DoNotValidateIssuerName"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Legacy issuer bypass (ignored)</span>
+                    </label>
+                  </div>
+                  <div
+                    class="checkboxContainer checkboxContainer-withDescription"
+                  >
+                    <label>
+                      <input
+                        is="emby-checkbox"
+                        id="DoNotLoadProfile"
+                        name="DoNotLoadProfile"
+                        type="checkbox"
+                        class="sso-toggle"
+                      />
+                      <span>Do Not Load Profile Information</span>
+                    </label>
+                    <div class="fieldDescription checkboxFieldDescription">
+                      May be required for Cloudflare OpenID
+                    </div>
+                  </div>
+
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="SchemeOverride"
+                      >Scheme Override</label
+                    >
+                    <input
+                      is="emby-input"
+                      id="SchemeOverride"
+                      type="text"
+                      class="sso-text"
+                    />
+                    <div class="fieldDescription">
+                      If the plugin is redirecting to an insecure URL, set this
+                      to "https"
+                    </div>
+                  </div>
+
+                  <div class="inputContainer">
+                    <label
+                      class="inputLabel inputLabelUnfocused"
+                      for="PortOverride"
+                      >Port Override</label
+                    >
+                    <input
+                      is="emby-input"
+                      id="PortOverride"
+                      type="text"
+                      class="sso-text"
+                    />
+                    <div class="fieldDescription">
+                      If the plugin is redirecting to an incorrect port, set
+                      this to the appropiate port
+                    </div>
+                  </div>
                 </details>
-                <p id="sso-provider-feedback" class="sso-provider-feedback" role="status" aria-live="polite"></p>
+                <p
+                  id="sso-provider-feedback"
+                  class="sso-provider-feedback"
+                  role="status"
+                  aria-live="polite"
+                ></p>
                 <button
                   id="SaveProvider"
                   is="emby-button"
@@ -671,84 +696,89 @@
           <section class="verticalSection verticalSection-extrabottompadding">
             <details class="sso-identity-management">
               <summary>Administrator-only OIDC identity links</summary>
-            <p class="fieldDescription">
-              To migrate an existing account, enter its Jellyfin user ID, the
-              exact OIDC issuer, and the identity provider's immutable subject
-              (the sub claim). The subject is not an email address or display
-              username. Existing links remain in place until explicitly removed.
-            </p>
-            <div class="selectContainer">
-              <label class="selectLabel" for="sso-link-provider"
-                >OIDC provider</label
+              <p class="fieldDescription">
+                To migrate an existing account, enter its Jellyfin user ID, the
+                exact OIDC issuer, and the identity provider's immutable subject
+                (the sub claim). The subject is not an email address or display
+                username. Existing links remain in place until explicitly
+                removed.
+              </p>
+              <div class="selectContainer">
+                <label class="selectLabel" for="sso-link-provider"
+                  >OIDC provider</label
+                >
+                <select
+                  id="sso-link-provider"
+                  is="emby-select"
+                  class="emby-select-withcolor emby-select"
+                ></select>
+              </div>
+              <div class="inputContainer">
+                <label class="inputLabel" for="sso-link-user-id"
+                  >Jellyfin user ID (32-character or hyphenated GUID)</label
+                >
+                <input
+                  id="sso-link-user-id"
+                  is="emby-input"
+                  type="text"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="inputContainer">
+                <label class="inputLabel" for="sso-link-issuer"
+                  >OIDC issuer (exact HTTPS URL)</label
+                >
+                <input
+                  id="sso-link-issuer"
+                  is="emby-input"
+                  type="url"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="inputContainer">
+                <label class="inputLabel" for="sso-link-subject"
+                  >OIDC subject (sub claim)</label
+                >
+                <input
+                  id="sso-link-subject"
+                  is="emby-input"
+                  type="text"
+                  autocomplete="off"
+                />
+              </div>
+              <div class="inputContainer">
+                <label class="inputLabel" for="sso-link-username"
+                  >Display username</label
+                >
+                <input
+                  id="sso-link-username"
+                  is="emby-input"
+                  type="text"
+                  autocomplete="off"
+                />
+              </div>
+              <button
+                id="sso-admin-link-add"
+                type="button"
+                is="emby-button"
+                class="raised button-submit emby-button"
               >
-              <select
-                id="sso-link-provider"
-                is="emby-select"
-                class="emby-select-withcolor emby-select"
-              ></select>
-            </div>
-            <div class="inputContainer">
-              <label class="inputLabel" for="sso-link-user-id"
-                >Jellyfin user ID (32-character or hyphenated GUID)</label
+                Create identity link
+              </button>
+              <button
+                id="sso-admin-link-list"
+                type="button"
+                is="emby-button"
+                class="raised emby-button"
               >
-              <input
-                id="sso-link-user-id"
-                is="emby-input"
-                type="text"
-                autocomplete="off"
-              />
-            </div>
-            <div class="inputContainer">
-              <label class="inputLabel" for="sso-link-issuer"
-                >OIDC issuer (exact HTTPS URL)</label
-              >
-              <input
-                id="sso-link-issuer"
-                is="emby-input"
-                type="url"
-                autocomplete="off"
-              />
-            </div>
-            <div class="inputContainer">
-              <label class="inputLabel" for="sso-link-subject"
-                >OIDC subject (sub claim)</label
-              >
-              <input
-                id="sso-link-subject"
-                is="emby-input"
-                type="text"
-                autocomplete="off"
-              />
-            </div>
-            <div class="inputContainer">
-              <label class="inputLabel" for="sso-link-username"
-                >Display username</label
-              >
-              <input
-                id="sso-link-username"
-                is="emby-input"
-                type="text"
-                autocomplete="off"
-              />
-            </div>
-            <button
-              id="sso-admin-link-add"
-              type="button"
-              is="emby-button"
-              class="raised button-submit emby-button"
-            >
-              Create identity link
-            </button>
-            <button
-              id="sso-admin-link-list"
-              type="button"
-              is="emby-button"
-              class="raised emby-button"
-            >
-              View existing links
-            </button>
-            <p id="sso-admin-link-status" role="status" aria-live="polite"></p>
-            <div id="sso-admin-link-results"></div>
+                View existing links
+              </button>
+              <p
+                id="sso-admin-link-status"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <div id="sso-admin-link-results"></div>
             </details>
           </section>
         </div>

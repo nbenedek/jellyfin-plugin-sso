@@ -12,7 +12,9 @@ const ssoConfigurationPage = {
       );
     } catch (error) {
       ssoConfigurationPage.setProviderFeedback(
-        page, "Could not load SSO provider settings: " + (error?.message || error), true,
+        page,
+        "Could not load SSO provider settings: " + (error?.message || error),
+        true,
       );
     }
   },
@@ -119,9 +121,14 @@ const ssoConfigurationPage = {
       const enabled_folders = mapping["Folders"] || [];
 
       pending.push(
-        ssoConfigurationPage.populateFolders(checklist).then(() =>
-          ssoConfigurationPage.populateEnabledFolders(enabled_folders, checklist),
-        ),
+        ssoConfigurationPage
+          .populateFolders(checklist)
+          .then(() =>
+            ssoConfigurationPage.populateEnabledFolders(
+              enabled_folders,
+              checklist,
+            ),
+          ),
       );
 
       elem.querySelector(".sso-role-mapping-name").value = mapping["Role"];
@@ -140,15 +147,17 @@ const ssoConfigurationPage = {
   },
   serializeRoleMappings: (container) => {
     var out = [];
-    [...container.querySelectorAll(".sso-role-mapping-container")].forEach((elem) => {
-      const role = elem.querySelector(".sso-role-mapping-name").value;
-      const checklist = elem.querySelector(".sso-folder-list");
+    [...container.querySelectorAll(".sso-role-mapping-container")].forEach(
+      (elem) => {
+        const role = elem.querySelector(".sso-role-mapping-name").value;
+        const checklist = elem.querySelector(".sso-folder-list");
 
-      out.push({
-        Role: role,
-        Folders: ssoConfigurationPage.serializeEnabledFolders(checklist),
-      });
-    });
+        out.push({
+          Role: role,
+          Folders: ssoConfigurationPage.serializeEnabledFolders(checklist),
+        });
+      },
+    );
 
     return out;
   },
@@ -250,7 +259,9 @@ const ssoConfigurationPage = {
   loadProvider: async (page, providerName) => {
     if (!providerName) {
       ssoConfigurationPage.setProviderFeedback(
-        page, "Choose a provider before loading it.", true,
+        page,
+        "Choose a provider before loading it.",
+        true,
       );
       return;
     }
@@ -295,34 +306,44 @@ const ssoConfigurationPage = {
       fields.check_fields.forEach((id) => {
         page.querySelector("#" + id).checked = provider[id] === true;
       });
-      await Promise.all(fields.role_map_fields.map((id) =>
-        ssoConfigurationPage.populateRoleMappings(
-          Array.isArray(provider[id]) ? provider[id] : [],
-          page.querySelector("#" + id),
+      await Promise.all(
+        fields.role_map_fields.map((id) =>
+          ssoConfigurationPage.populateRoleMappings(
+            Array.isArray(provider[id]) ? provider[id] : [],
+            page.querySelector("#" + id),
+          ),
         ),
-      ));
+      );
 
       page.dataset.ssoLoadedProvider = providerName;
       ssoConfigurationPage.setProviderFeedback(
-        page, 'Loaded provider "' + providerName + '".',
+        page,
+        'Loaded provider "' + providerName + '".',
       );
     } catch (error) {
       ssoConfigurationPage.setProviderFeedback(
-        page, 'Unable to load provider: ' + (error?.message || error), true,
+        page,
+        "Unable to load provider: " + (error?.message || error),
+        true,
       );
     }
   },
   deleteProvider: async (page, providerName) => {
     if (!providerName) {
-      ssoConfigurationPage.setProviderFeedback(page, "Select a provider first.", true);
+      ssoConfigurationPage.setProviderFeedback(
+        page,
+        "Select a provider first.",
+        true,
+      );
       return;
     }
 
     // Removal also deletes its saved OIDC subject links; require typing the
     // exact name instead of a yes/no click.
     const confirmation = window.prompt(
-      'Deleting "' + providerName +
-      '" also deletes its identity mappings. Type the provider name to confirm:',
+      'Deleting "' +
+        providerName +
+        '" also deletes its identity mappings. Type the provider name to confirm:',
     );
     if (confirmation !== providerName) {
       return;
@@ -338,7 +359,8 @@ const ssoConfigurationPage = {
 
       delete config.OidConfigs[providerName];
       const result = await ApiClient.updatePluginConfiguration(
-        ssoConfigurationPage.pluginUniqueId, config,
+        ssoConfigurationPage.pluginUniqueId,
+        config,
       );
       Dashboard.processPluginConfigurationUpdateResult(result);
       ssoConfigurationPage.resetProviderForm(page);
@@ -346,7 +368,9 @@ const ssoConfigurationPage = {
       ssoConfigurationPage.setProviderFeedback(page, "Provider removed.");
     } catch (error) {
       ssoConfigurationPage.setProviderFeedback(
-        page, 'Deletion failed: ' + (error?.message || error), true,
+        page,
+        "Deletion failed: " + (error?.message || error),
+        true,
       );
     }
   },
@@ -366,22 +390,34 @@ const ssoConfigurationPage = {
     if (
       url.protocol !== "https:" ||
       !url.hostname ||
-      url.username || url.password ||
-      url.search || url.hash
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash
     ) {
-      throw new Error("OIDC issuer must be an HTTPS URL with no credentials, query or fragment.");
+      throw new Error(
+        "OIDC issuer must be an HTTPS URL with no credentials, query or fragment.",
+      );
     }
     if (!existing && !page.querySelector("#OidSecret").value) {
       throw new Error("A client secret is required for a new provider.");
     }
     const override = page.querySelector("#PortOverride").value.trim();
-    if (override && (!/^[0-9]+$/.test(override) ||
-      Number(override) < 1 || Number(override) > 65535)) {
+    if (
+      override &&
+      (!/^[0-9]+$/.test(override) ||
+        Number(override) < 1 ||
+        Number(override) > 65535)
+    ) {
       throw new Error("Port override must be a number between 1 and 65535.");
     }
-    if (page.dataset.ssoLoadedProvider &&
-        page.dataset.ssoLoadedProvider !== providerName) {
-      throw new Error("Provider identifier changed. Use New provider or reload the original provider.");
+    if (
+      page.dataset.ssoLoadedProvider &&
+      page.dataset.ssoLoadedProvider !== providerName
+    ) {
+      throw new Error(
+        "Provider identifier changed. Use New provider or reload the original provider.",
+      );
     }
     return { issuer, portOverride: override ? Number(override) : null };
   },
@@ -405,8 +441,11 @@ const ssoConfigurationPage = {
         throw new Error("Load the existing provider before editing it.");
       }
 
-      const { issuer, portOverride } =
-        ssoConfigurationPage.validateProvider(page, name, existing);
+      const { issuer, portOverride } = ssoConfigurationPage.validateProvider(
+        page,
+        name,
+        existing,
+      );
       const next = { ...(existing || {}) };
       formElements.text_fields.forEach((id) => {
         next[id] = page.querySelector("#" + id).value || null;
@@ -419,7 +458,9 @@ const ssoConfigurationPage = {
         next[id] = page.querySelector("#" + id).checked;
       });
       formElements.text_list_fields.forEach((id) => {
-        next[id] = ssoConfigurationPage.parseTextList(page.querySelector("#" + id));
+        next[id] = ssoConfigurationPage.parseTextList(
+          page.querySelector("#" + id),
+        );
       });
       formElements.folder_list_fields.forEach((id) => {
         next[id] = ssoConfigurationPage.serializeEnabledFolders(
@@ -427,7 +468,9 @@ const ssoConfigurationPage = {
         );
       });
       formElements.role_map_fields.forEach((id) => {
-        next[id] = ssoConfigurationPage.serializeRoleMappings(page.querySelector("#" + id));
+        next[id] = ssoConfigurationPage.serializeRoleMappings(
+          page.querySelector("#" + id),
+        );
       });
 
       // Leave the identity dictionaries in the fetched provider object intact.
@@ -439,16 +482,22 @@ const ssoConfigurationPage = {
       config.OidConfigs[name] = next;
 
       const result = await ApiClient.updatePluginConfiguration(
-        ssoConfigurationPage.pluginUniqueId, config,
+        ssoConfigurationPage.pluginUniqueId,
+        config,
       );
       Dashboard.processPluginConfigurationUpdateResult(result);
       await ssoConfigurationPage.loadConfiguration(page);
       await ssoConfigurationPage.loadProvider(page, name);
       page.querySelector("#selectProvider").value = name;
-      ssoConfigurationPage.setProviderFeedback(page, "Provider settings saved. Re-test SSO login.");
+      ssoConfigurationPage.setProviderFeedback(
+        page,
+        "Provider settings saved. Re-test SSO login.",
+      );
     } catch (error) {
       ssoConfigurationPage.setProviderFeedback(
-        page, "Save failed: " + (error?.message || error), true,
+        page,
+        "Save failed: " + (error?.message || error),
+        true,
       );
     } finally {
       saveButton.disabled = false;

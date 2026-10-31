@@ -4,16 +4,16 @@ This file tracks the `dev/oidc-security-refactor` branch. Jellyfin 10.11.6 is
 the primary development target. Stage acceptance requires both automated
 regression tests and live validation on development Jellyfin instance.
 
-| Stage | Scope                                                                             | Status                                         |
-| ----- | --------------------------------------------------------------------------------- | ---------------------------------------------- |
-| 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                       |
-| 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                       |
-| 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                      |
+| Stage | Scope                                                                             | Status                                                       |
+| ----- | --------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                                     |
+| 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                                     |
+| 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                                    |
 | 4     | API authorization, method semantics, provider security, and negative-access tests | Negative tests passed; re-enabled login confirmation pending |
-| 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                      |
-| 6     | Administrator interface modernization and navigation                              | Code implemented; live acceptance pending      |
-| 7     | Legacy code cleanup and dependency reduction                                      | Planned                                        |
-| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Planned                                        |
+| 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                                    |
+| 6     | Administrator interface modernization and navigation                              | Code implemented; live acceptance pending                    |
+| 7     | Legacy code cleanup and dependency reduction                                      | Planned                                                      |
+| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Planned                                                      |
 
 ## Stage 4 acceptance
 
@@ -42,6 +42,7 @@ Implementation acceptance:
 - Prioritize the external SSO sign-in button without removing native Jellyfin login.
 
 Implementation prepared for Jellyfin Web 10.11.6:
+
 - Configuration page advertises `EnableInMainMenu = true` and displays
   "SSO Authentication" in the Dashboard's Plugins sidebar group.
 - The existing Plugins → Settings page continues using the same `Name = SSO-Auth`.
