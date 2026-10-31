@@ -26,7 +26,7 @@ class ReleasePackageTests(unittest.TestCase):
             "name": "SSO Authentication",
             "owner": "nbenedek",
             "description": "OpenID Connect sign-in. Documentation at https://github.com/nbenedek/jellyfin-plugin-sso",
-            "changelog": "4.1.0.0 — OIDC security release\\n- One-time transactions\\n- Issuer/subject links\\n- Admin only linking\\n- UI update",
+            "changelog": "4.1.0.0 — OIDC security release\n- One-time transactions\n- Issuer/subject links\n- Admin only linking\n- UI update",
         }
 
     def build(self, *, omit=None, extra=None, metadata=None):
