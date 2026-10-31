@@ -1,0 +1,28 @@
+name: Stage 6 one-time formatter
+
+on:
+  push:
+    branches: [dev/oidc-security-refactor]
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: github.event.head_commit.message == 'chore: trigger Stage 6 formatting'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: true
+      - name: Format the three files flagged by CI
+        run: npx --yes prettier@latest --write docs/ROADMAP.md SSO-Auth/Config/config.js SSO-Auth/Config/configPage.html
+      - name: Commit formatted files only
+        run: |
+          git add docs/ROADMAP.md SSO-Auth/Config/config.js SSO-Auth/Config/configPage.html
+          if ! git diff --staged --quiet; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git commit -m "style: format Stage 6 admin UI"
+            git push origin HEAD:dev/oidc-security-refactor
+          fi
