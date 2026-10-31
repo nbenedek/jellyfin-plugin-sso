@@ -25,6 +25,8 @@ jobs:
           dotnet build -c Release --no-restore --warnaserror
       - name: Unit and regression tests
         run: dotnet test -c Release --no-build --verbosity normal
+      - name: Packaging verifier regression tests
+        run: python3 -m unittest discover -s tests -p 'test_release_package.py' -v
       - name: Administrator UI tests
         run: node --test tests/stage6-ui.test.mjs
       - name: Validate smoke-test shell syntax
@@ -34,6 +36,10 @@ jobs:
         uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d # v1.1.1
         with:
           dotnet-target: net9.0
+      - name: Verify Jellyfin package structure and metadata
+        env:
+          PACKAGE: ${{ steps.jprm.outputs.artifact }}
+        run: python3 tools/verify_release_package.py "$PACKAGE" 4.1.0.0
       - name: Generate and verify SHA-256 checksum
         env:
           PACKAGE: ${{ steps.jprm.outputs.artifact }}

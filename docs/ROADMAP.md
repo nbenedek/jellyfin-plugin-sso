@@ -12,7 +12,7 @@ regression tests and live validation on development Jellyfin instance.
 | 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                          |
 | 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                          |
 | 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed) |
-| 7     | Legacy code cleanup and dependency reduction                                      | Complete; development acceptance passed           |
+| 7     | Legacy code cleanup and dependency reduction                                      | Complete; development acceptance passed            |
 | 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Dev accepted; production promotion gated           |
 
 ## Stage 4 acceptance
@@ -72,7 +72,8 @@ automatically injecting visual styling.
 - [x] Migrate one reviewed legacy account and verify functionality on development Jellyfin instance (user confirmed).
 - [x] Complete the two legacy Keycloak account migrations on development Jellyfin instance (user confirmed).
 - [x] Verify migrated users remain linked after settings edit and restart.
-- [ ] Review any remaining unmigrated users before production promotion.
+- [x] Confirm no remaining legacy accounts on the development instance (operator confirmed, 2026-10-31).
+- [ ] Review any remaining unmigrated users on production before promotion.
 
 The Jellyfin Dashboard remains uncluttered: Stage 6 concerns regular SSO
 settings and navigation only. Bulk legacy migration remains a CLI operation.

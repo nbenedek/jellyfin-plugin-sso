@@ -24,7 +24,9 @@ explicit GitHub Release publication.
 
 The **Release Candidate Package** GitHub Actions workflow builds and tests
 the development branch, packages using the Jellyfin plugin repository manager,
-verifies SHA-256 and uploads a ZIP and `SHA256SUMS` as a build artifact. It
+checks that the ZIP contains exactly the expected assemblies and `meta.json`,
+verifies the package metadata, then verifies SHA-256 and uploads a ZIP and
+`SHA256SUMS` as a build artifact. It
 does not publish a GitHub Release or deploy to Jellyfin. The assembly and
 `build.yaml` versions are both `4.1.0.0`. Before unpacking or distributing the
 artifact, run:
@@ -48,8 +50,13 @@ find /var/lib/jellyfin /etc/jellyfin -type f -name 'SSO-Auth.xml' -print 2>/dev/
 ```
 
 Make a root-only backup of the **entire existing plugin directory** and
-the XML configuration. Stop Jellyfin, replace the plugin files from the
-verified ZIP using the existing installation layout, then start Jellyfin.
+the XML configuration. The JPRM ZIP contains `SSO-Auth.dll`,
+`Duende.IdentityModel.OidcClient.dll`, `Duende.IdentityModel.dll` and
+**`meta.json`** (not `manifest.json`). Stop Jellyfin and install all four
+files together into a plugin directory named for the new version, retaining
+the plugin GUID. Remove or move aside the old versioned plugin directory to
+avoid loading two copies; preserve the separate `SSO-Auth.xml` configuration.
+Then start Jellyfin and confirm that the plugin manager reports 4.1.0.0.
 Keep the native administrator account available for recovery. Never edit
 identity dictionaries by hand or restore an XML file over live Jellyfin
 configuration while the service is running.
@@ -82,7 +89,8 @@ invoke any setting mutations or log in with credentials.
 - Non-admin access to provider configuration and link-management endpoints is
   forbidden; publicly reachable legacy linking page remains absent
 - Browser and Android login flows work; no callback overlays or auth loops
-- Review all remaining unmigrated legacy accounts before production promotion
+- Development: no remaining legacy accounts (operator confirmed 2026-10-31)
+- Production: review any remaining unmigrated legacy accounts before promotion
 
 ## Rollback and release gate
 
@@ -108,3 +116,19 @@ manual library access, provider saves, restart persistence and web/Android
 flows were confirmed. No further invalid/missing authentication-provider
 warnings appeared after deployment. This does not constitute production
 acceptance or a completed independent penetration test.
+
+## Packaging notes
+
+The package is intended for a Jellyfin plugin-directory installation, not a
+`.NET` publish output. Its `meta.json` is the authoritative installed-plugin
+metadata; updating only the DLL leaves Jellyfin displaying the previous version.
+The ZIP must contain exactly these four files: `SSO-Auth.dll`,
+`Duende.IdentityModel.dll`, `Duende.IdentityModel.OidcClient.dll`, and
+`meta.json`. The repository's `tools/verify_release_package.py` checks
+version, target ABI, plugin GUID, package layout and nonempty assemblies.
+
+Do not install an additional copy alongside a different version; move the
+previous version directory to a private backup location first. The plugin
+configuration at `plugins/configurations/SSO-Auth.xml` is not packaged and must
+not be replaced with generic defaults. After successful installation, verify
+both the reported plugin version and the authentication flow before promotion.
