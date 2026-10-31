@@ -45,7 +45,7 @@
             for more information.
             <br />
             OIDC account linking is restricted to administrators. Use the
-            management section below to associate a Keycloak identity with an
+            management section below to associate an OIDC identity with an
             existing Jellyfin account.
           </p>
 
@@ -671,10 +671,10 @@
           <section class="verticalSection verticalSection-extrabottompadding">
             <h2 class="sectionTitle">Administrator-only OIDC identity links</h2>
             <p class="fieldDescription">
-              To migrate an existing account, enter its Jellyfin user ID and the
-              exact OIDC issuer and immutable subject from Keycloak. In
-              Keycloak, the subject is the user's ID, not their username.
-              Existing links remain in place until explicitly removed.
+              To migrate an existing account, enter its Jellyfin user ID, the
+              exact OIDC issuer, and the identity provider's immutable subject
+              (the sub claim). The subject is not an email address or display
+              username. Existing links remain in place until explicitly removed.
             </p>
             <div class="selectContainer">
               <label class="selectLabel" for="sso-link-provider"
@@ -688,7 +688,7 @@
             </div>
             <div class="inputContainer">
               <label class="inputLabel" for="sso-link-user-id"
-                >Jellyfin user ID (GUID)</label
+                >Jellyfin user ID (32-character or hyphenated GUID)</label
               >
               <input
                 id="sso-link-user-id"
@@ -710,7 +710,7 @@
             </div>
             <div class="inputContainer">
               <label class="inputLabel" for="sso-link-subject"
-                >OIDC subject (Keycloak user ID)</label
+                >OIDC subject (sub claim)</label
               >
               <input
                 id="sso-link-subject"

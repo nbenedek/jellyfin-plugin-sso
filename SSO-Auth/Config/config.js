@@ -376,21 +376,98 @@ const ssoConfigurationPage = {
   setLinkStatus: (page, message) => {
     page.querySelector("#sso-admin-link-status").textContent = message;
   },
-  linkRequest: (options) => ApiClient.fetch(options),
+  normalizeJellyfinUserId: (value) => {
+    const entered = value.trim();
+    const matches =
+      /^[0-9a-f]{32}$/i.test(entered) ||
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        entered,
+      );
+    if (!matches) {
+      return null;
+    }
+    const hex = entered.replace(/-/g, "").toLowerCase();
+    return [
+      hex.slice(0, 8),
+      hex.slice(8, 12),
+      hex.slice(12, 16),
+      hex.slice(16, 20),
+      hex.slice(20),
+    ].join("-");
+  },
+  getLinkUserId: (page) => {
+    const field = page.querySelector("#sso-link-user-id");
+    const normalized = ssoConfigurationPage.normalizeJellyfinUserId(
+      field.value,
+    );
+    if (normalized) {
+      field.value = normalized;
+    }
+    return normalized;
+  },
+  formatLinkError: async (error) => {
+    const response = error?.response || error;
+    const status = response?.status ?? error?.statusCode;
+    let details = typeof error === "string" ? error : "";
+
+    if (!details && typeof response?.text === "function") {
+      try {
+        details = await response.text();
+      } catch (_) {
+        // Some API clients consume the response body before rejecting.
+      }
+    }
+
+    if (!details) {
+      details =
+        error?.responseText ||
+        error?.responseJSON?.message ||
+        error?.responseJSON?.title ||
+        error?.message ||
+        error?.statusText ||
+        "";
+    }
+
+    if (typeof details !== "string") {
+      details = String(details || "");
+    }
+
+    if (details.trim().startsWith("{")) {
+      try {
+        const payload = JSON.parse(details);
+        details =
+          payload.detail ||
+          payload.message ||
+          payload.title ||
+          payload.error ||
+          details;
+      } catch (_) {
+        // A non-JSON body should still be displayed.
+      }
+    }
+
+    const readable = String(details).trim() || "Request was rejected.";
+    return status ? `HTTP ${status} — ${readable}` : readable;
+  },
+  linkRequest: async (options) => {
+    try {
+      const response = await ApiClient.fetch(options);
+      if (response?.ok === false) {
+        throw response;
+      }
+      return response;
+    } catch (error) {
+      throw new Error(await ssoConfigurationPage.formatLinkError(error));
+    }
+  },
   createIdentityLink: async (page) => {
     const provider = page.querySelector("#sso-link-provider").value;
-    const userId = page.querySelector("#sso-link-user-id").value.trim();
+    const userId = ssoConfigurationPage.getLinkUserId(page);
     const issuer = page.querySelector("#sso-link-issuer").value.trim();
     const subject = page.querySelector("#sso-link-subject").value.trim();
     const username = page.querySelector("#sso-link-username").value.trim();
 
-    if (
-      !provider ||
-      !/^[a-f0-9-]{36}$/i.test(userId) ||
-      !issuer ||
-      !subject ||
-      !username
-    ) {
+    if (!provider || !userId || !issuer || !subject || !username) {
       ssoConfigurationPage.setLinkStatus(
         page,
         "Enter a provider, valid Jellyfin user ID, issuer, subject, and username.",
@@ -399,7 +476,7 @@ const ssoConfigurationPage = {
     }
     if (
       !window.confirm(
-        `Link Keycloak subject "${subject}" to Jellyfin user "${userId}"?`,
+        `Link OIDC subject "${subject}" to Jellyfin user "${userId}"?`,
       )
     ) {
       return;
@@ -407,7 +484,7 @@ const ssoConfigurationPage = {
 
     ssoConfigurationPage.setLinkStatus(page, "Saving identity link...");
     try {
-      const response = await ssoConfigurationPage.linkRequest({
+      await ssoConfigurationPage.linkRequest({
         type: "POST",
         url: ApiClient.getUrl(
           `sso/oid/Link/${encodeURIComponent(provider)}/${userId}`,
@@ -419,9 +496,6 @@ const ssoConfigurationPage = {
           Username: username,
         }),
       });
-      if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}`);
-      }
       ssoConfigurationPage.setLinkStatus(page, "Identity link saved.");
       await ssoConfigurationPage.listIdentityLinks(page);
     } catch (error) {
@@ -429,10 +503,10 @@ const ssoConfigurationPage = {
     }
   },
   listIdentityLinks: async (page) => {
-    const userId = page.querySelector("#sso-link-user-id").value.trim();
+    const userId = ssoConfigurationPage.getLinkUserId(page);
     const results = page.querySelector("#sso-admin-link-results");
     results.replaceChildren();
-    if (!/^[a-f0-9-]{36}$/i.test(userId)) {
+    if (!userId) {
       ssoConfigurationPage.setLinkStatus(
         page,
         "Enter a valid Jellyfin user ID to list links.",
@@ -444,21 +518,21 @@ const ssoConfigurationPage = {
         type: "GET",
         url: ApiClient.getUrl(`sso/oid/links/${userId}`),
       });
-      if (!response.ok) {
-        throw new Error(`Server returned HTTP ${response.status}`);
-      }
       const providers = await response.json();
+      let linkCount = 0;
+
       for (const [provider, names] of Object.entries(providers)) {
         for (const name of names) {
           const row = document.createElement("div");
-          row.className = "listItem";
-          const label = document.createElement("span");
-          label.className = "listItemBody";
-          label.textContent = `${provider}: ${name}`;
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "raised emby-button";
-          button.textContent = "Unlink";
+          row.className = "sso-identity-link-row";
+          row.innerHTML = `
+            <span class="sso-identity-link-label"></span>
+            <button type="button" is="emby-button" class="raised button-delete emby-button sso-identity-unlink">Unlink</button>
+          `;
+          row.querySelector(".sso-identity-link-label").textContent =
+            `${provider}: ${name}`;
+          const button = row.querySelector(".sso-identity-unlink");
+          button.setAttribute("aria-label", `Unlink ${name} from ${provider}`);
           button.addEventListener("click", async () => {
             if (
               !window.confirm(
@@ -467,38 +541,34 @@ const ssoConfigurationPage = {
             ) {
               return;
             }
+            button.disabled = true;
             try {
-              const response = await ssoConfigurationPage.linkRequest({
+              await ssoConfigurationPage.linkRequest({
                 type: "DELETE",
                 url: ApiClient.getUrl(
                   `sso/oid/Link/${encodeURIComponent(provider)}/${userId}/${encodeURIComponent(name)}`,
                 ),
               });
-              if (!response.ok) {
-                throw new Error(`Server returned HTTP ${response.status}`);
-              }
-              ssoConfigurationPage.setLinkStatus(
-                page,
-                "Identity link removed.",
-              );
               await ssoConfigurationPage.listIdentityLinks(page);
             } catch (error) {
+              button.disabled = false;
               ssoConfigurationPage.setLinkStatus(
                 page,
                 `Unlink failed: ${error.message}`,
               );
             }
           });
-          row.append(label, button);
           results.appendChild(row);
+          linkCount += 1;
         }
       }
-      if (!results.children.length) {
-        ssoConfigurationPage.setLinkStatus(
-          page,
-          "No identity links for this Jellyfin user.",
-        );
-      }
+
+      ssoConfigurationPage.setLinkStatus(
+        page,
+        linkCount
+          ? `${linkCount} identity link${linkCount === 1 ? "" : "s"} found.`
+          : "No identity links for this Jellyfin user.",
+      );
     } catch (error) {
       ssoConfigurationPage.setLinkStatus(
         page,
@@ -557,6 +627,9 @@ export default function (view) {
     ssoConfigurationPage.populateRoleMappings(current_mappings, container);
   });
 
+  view.querySelector("#sso-link-user-id").addEventListener("blur", () => {
+    ssoConfigurationPage.getLinkUserId(view);
+  });
   view.querySelector("#sso-link-provider").addEventListener("change", () => {
     ApiClient.getPluginConfiguration(ssoConfigurationPage.pluginUniqueId).then(
       (config) =>

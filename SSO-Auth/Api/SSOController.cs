@@ -714,7 +714,7 @@ public class SSOController : ControllerBase
     [Authorize(Policy = Policies.RequiresElevation)]
     [HttpGet("oid/links/{jellyfinUserId}")]
     [Produces(MediaTypeNames.Application.Json)]
-    public async Task<ActionResult<SerializableDictionary<string, IEnumerable<string>>>> GetOidLinksByUser(Guid jellyfinUserId)
+    public ActionResult<SerializableDictionary<string, IEnumerable<string>>> GetOidLinksByUser(Guid jellyfinUserId)
     {
         var mappings = new SerializableDictionary<string, IEnumerable<string>>();
         var providerList = SSOPlugin.Instance.Configuration.OidConfigs;
