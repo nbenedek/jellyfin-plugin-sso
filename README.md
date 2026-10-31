@@ -22,7 +22,7 @@
 </a>
 </p>
 
-Project archived because I'm tired of working on this after all the years.
+This fork continues development of the upstream Jellyfin SSO plugin, whose original repository is archived. This branch is a release candidate; production readiness requires live verification.
 
 This plugin allows users to sign in through an SSO provider (such as Google, Microsoft, or your own provider). This enables one-click signin.
 
@@ -277,7 +277,7 @@ This project uses Nix flakes to manage development dependencies. Run `nix develo
 
 ## Building
 
-This is built with .NET 6.0. Build with `dotnet publish .` for the debug release in the `SSO-Auth` directory. Copy over the `IdentityModel.OidcClient.dll`, the `IdentityModel.dll` and the `SSO-Auth.dll` files in the `/bin/Debug/net6.0/publish` directory to a new folder in your Jellyfin configuration: `config/plugins/sso`.
+The maintained fork targets .NET 9 and Jellyfin 10.11. Use `dotnet restore`, `dotnet build -c Release --no-restore --warnaserror`, and `dotnet test -c Release --no-build`. A development-branch release-candidate workflow produces a tested, checksummed ZIP. See [release candidate instructions](docs/RELEASE-CANDIDATE.md) for installation and rollback; do not copy binaries from older .NET 6 releases.
 
 ### VSCode Workflow
 

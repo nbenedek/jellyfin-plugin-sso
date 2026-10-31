@@ -1,6 +1,6 @@
 # Stage 7 — legacy cleanup and dependency reduction
 
-**Status:** inventory prepared; refactors require CI and development Jellyfin instance validation.
+**Status:** implementation complete; final development-instance regression and security review gates remain.
 **Accepted starting point:** Stage 6 passed 8/8 user-reported live checks on 2026-10-31. Keep production unchanged until Stage 8.
 
 ## Non-negotiable behavior
@@ -17,7 +17,7 @@
 1. **Characterization tests before structural changes.** Cover callback HTML generation, paths for web/native clients, error handling for missing localStorage credentials, and response parsing. `SSO-Auth/WebResponse.cs` is approximately 479 lines of embedded JavaScript, device/browser detection, and HTML. It is a high-risk legacy integration boundary, not safe to replace in one step. Its current generated client string includes a hardcoded Jellyfin Web version (`10.8.0`), which merits separate compatibility testing rather than a blind version change.
 2. **Controller separation.** `SSO-Auth/Api/SSOController.cs` is approximately 934 lines and currently mixes callback/challenge, public token exchange, provider administration, identity resolution, and user authorization. Extract pure, testable functions first; split into public and elevated controllers only after route and policy regression tests. Preserve the existing public URLs.
 3. **Configuration compatibility.** `SSO-Auth/Config/PluginConfiguration.cs` still defines the legacy `DisableHttps` and `DoNotValidateIssuerName` XML properties. Keep them deserializable while ensuring authentication always enforces TLS and issuer validation. Do not remove legacy migration fields until migration inventory is complete.
-4. **Dependency review.** The plugin directly references Duende.IdentityModel.OidcClient 6.0.1 and Newtonsoft.Json 13.0.3 in `SSO-Auth/SSO-Auth.csproj`. Identify actual call sites and transitive constraints before replacement/removal. Avoid simultaneous client-library updates and security-sensitive refactoring.
+4. **Dependency review.** Duende.IdentityModel.OidcClient provides the OIDC client; Newtonsoft.Json parses nested role claims; Jellyfin.Controller and Jellyfin.Model expose host API types. Analyzer packages are build-only. No dependency has been removed speculatively. Future package upgrades require separate compatibility validation.
 5. **Migration script retirement.** The unsafe Python XML writer is retired. The supported offline migration path is the standalone .NET 9 `SSO-Auth.Migration` CLI. Native .NET tests cover XML round-tripping, identity collisions, approval hashes and controlled application; no plugin runtime migration behavior changes.
 6. **Login emphasis remains independent.** `docs/LOGIN-EMPHASIS.md` provides optional CSS only. Verify the actual login button markup in web and Android environments before adding styling. Never hide manual administrator login.
 

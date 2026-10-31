@@ -85,42 +85,7 @@ public static class OidcClaimsEvaluator
                     }
                     else
                     {
-                        // We recursively traverse through the JSON data for the roles and parse it
-                        var json = JsonConvert.DeserializeObject<IDictionary<string, object>>(claim.Value);
-                        if (json is null)
-                        {
-                            roles = new List<string>();
-                        }
-                        else
-                        {
-                            bool missingSegment = false;
-                            for (int i = 1; i < segments.Length - 1; i++)
-                            {
-                                var segment = segments[i];
-                                if (!json.TryGetValue(segment, out var nextToken) || nextToken is not JObject nextObject)
-                                {
-                                    missingSegment = true;
-                                    break;
-                                }
-
-                                json = nextObject.ToObject<IDictionary<string, object>>();
-                                if (json is null)
-                                {
-                                    missingSegment = true;
-                                    break;
-                                }
-                            }
-
-                            if (missingSegment || !json.TryGetValue(segments[^1], out var rolesToken) || rolesToken is not JArray rolesArray)
-                            {
-                                roles = new List<string>();
-                            }
-                            else
-                            {
-                                // The final step is to take the JSON and turn it from a dictionary into a string
-                                roles = rolesArray.ToObject<List<string>>();
-                            }
-                        }
+                        roles = ParseNestedRoles(claim.Value, segments);
                     }
 
                     foreach (string role in roles)
@@ -215,5 +180,44 @@ public static class OidcClaimsEvaluator
             folders.ToArray(),
             enableLiveTv,
             enableLiveTvManagement);
+    }
+
+    private static List<string> ParseNestedRoles(string claimValue, string[] segments)
+    {
+        try
+        {
+            var json = JsonConvert.DeserializeObject<IDictionary<string, object>>(claimValue);
+            if (json is null)
+            {
+                return new List<string>();
+            }
+
+            for (int i = 1; i < segments.Length - 1; i++)
+            {
+                if (!json.TryGetValue(segments[i], out var nextToken) || nextToken is not JObject nextObject)
+                {
+                    return new List<string>();
+                }
+
+                json = nextObject.ToObject<IDictionary<string, object>>();
+                if (json is null)
+                {
+                    return new List<string>();
+                }
+            }
+
+            if (!json.TryGetValue(segments[^1], out var rolesToken) || rolesToken is not JArray rolesArray)
+            {
+                return new List<string>();
+            }
+
+            return rolesArray.ToObject<List<string>>()?.Where(role => role is not null).ToList() ?? new List<string>();
+        }
+        catch (JsonException)
+        {
+            // Malformed provider role claims must not turn a login into HTTP 500,
+            // and must never grant administrator or folder permissions.
+            return new List<string>();
+        }
     }
 }

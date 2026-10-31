@@ -1,0 +1,60 @@
+name: Release Candidate Package
+
+on:
+  push:
+    branches:
+      - dev/oidc-security-refactor
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Set up .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 9.0.x
+      - name: Restore and build
+        run: |
+          dotnet restore
+          dotnet build -c Release --no-restore --warnaserror
+      - name: Unit and regression tests
+        run: dotnet test -c Release --no-build --verbosity normal
+      - name: Administrator UI tests
+        run: node --test tests/stage6-ui.test.mjs
+      - name: Build Jellyfin-compatible package
+        id: jprm
+        uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d # v1.1.1
+        with:
+          dotnet-target: net9.0
+      - name: Generate and verify SHA-256 checksum
+        env:
+          PACKAGE: ${{ steps.jprm.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          test -f "$PACKAGE"
+          case "$PACKAGE" in
+            *.zip) ;;
+            *) echo 'Expected JPRM to produce a ZIP archive' >&2; exit 1 ;;
+          esac
+          mkdir -p _release
+          cp "$PACKAGE" _release/
+          (
+            cd _release
+            sha256sum "$(basename "$PACKAGE")" > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+      - name: Upload release candidate and checksum
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sso-auth-4.1.0.0-rc
+          retention-days: 30
+          if-no-files-found: error
+          path: |
+            _release/*.zip
+            _release/SHA256SUMS

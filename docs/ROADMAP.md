@@ -12,8 +12,8 @@ regression tests and live validation on development Jellyfin instance.
 | 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                            |
 | 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                            |
 | 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed)   |
-| 7     | Legacy code cleanup and dependency reduction                                      | In progress; inventory and regression-first refactor |
-| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Planned                                              |
+| 7     | Legacy code cleanup and dependency reduction                                      | Code complete; full live regression pending          |
+| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Release candidate prepared; promotion gated          |
 
 ## Stage 4 acceptance
 
@@ -109,3 +109,16 @@ baseline until Stage 7 changes pass CI and live login tests. See
 and regression gates. Avoid deleting configuration schema properties solely
 because they are obsolete at runtime: existing XML installations must remain
 readable. Do not promote Stage 7 changes to production without Stage 8 audit.
+
+## Stage 7D/8 release-candidate checkpoint
+
+Provider settings writes now preserve server-owned OIDC identity mappings, with
+regression coverage for both existing and newly created providers. The legacy
+migration writer was retired; the native .NET migration tool remains supported.
+Malformed nested role claims fail closed rather than producing a server error.
+The shared callback and authentication flow remain compatible with Stage 7C.
+
+The Stage 8 release candidate uses a versioned plugin package, SHA-256
+checksums and CI tests. It is **not** an accepted production release until the
+full manual acceptance matrix passes on a development instance and the
+production migration inventory is reviewed. See [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md).

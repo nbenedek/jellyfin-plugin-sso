@@ -91,4 +91,33 @@ public sealed class OidcClaimsEvaluatorTests
         Assert.True(evaluation.EnableLiveTv);
         Assert.False(evaluation.EnableLiveTvManagement);
     }
+
+    [Theory]
+    [InlineData("{not-json")]
+    [InlineData("{\"roles\":\"admin\"}")]
+    [InlineData("{\"roles\":[null]}")]
+    public void InvalidNestedRoleClaimsNeverGrantPrivileges(string raw)
+    {
+        var config = new OidConfig
+        {
+            RoleClaim = "realm_access.roles",
+            Roles = new[] { "viewer" },
+            AdminRoles = new[] { "administrator" },
+            EnableFolderRoles = true,
+            FolderRoleMapping = new List<FolderRoleMap>
+            {
+                new() { Role = "viewer", Folders = new List<string> { "library-a" } },
+            },
+        };
+
+        var evaluated = OidcClaimsEvaluator.Evaluate(config, new[]
+        {
+            new Claim("preferred_username", "viewer"),
+            new Claim("realm_access", raw),
+        });
+
+        Assert.False(evaluated.IsValid);
+        Assert.False(evaluated.IsAdministrator);
+        Assert.Empty(evaluated.Folders);
+    }
 }
