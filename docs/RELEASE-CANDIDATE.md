@@ -1,7 +1,7 @@
 # Jellyfin SSO 4.1.0.0 — release candidate
 
-**Status:** code and release packaging prepared; live acceptance and production
-promotion remain gated. This is an OIDC-only fork targeting Jellyfin 10.11.x
+**Status:** release candidate passed development live acceptance on 2026-10-31;
+production promotion remains gated. This is an OIDC-only fork targeting Jellyfin 10.11.x
 and .NET 9. No automatic production installation or repository publication
 occurs from development-branch builds. Legacy nightly publication now requires
 an explicit manual workflow invocation; a production release requires an
@@ -97,3 +97,14 @@ inventory, a clean CI run, a reviewed security checklist, and an approved
 maintenance window with the rollback backup already taken.
 
 See [SECURITY-AUDIT.md](SECURITY-AUDIT.md) for findings and residual risks.
+
+## Development validation record
+
+The operator confirmed completion of the full manual acceptance matrix against
+4.1.0.0, based on commit `ce6dc4e89d8439c63c4964f0bb8f29512c79170a`.
+The Stage 8 unauthenticated smoke tests passed 8/8 after the server became
+ready; Keycloak and local administrator login, both migrated identities,
+manual library access, provider saves, restart persistence and web/Android
+flows were confirmed. No further invalid/missing authentication-provider
+warnings appeared after deployment. This does not constitute production
+acceptance or a completed independent penetration test.

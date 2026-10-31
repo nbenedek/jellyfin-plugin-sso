@@ -12,8 +12,8 @@ regression tests and live validation on development Jellyfin instance.
 | 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                          |
 | 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                          |
 | 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed) |
-| 7     | Legacy code cleanup and dependency reduction                                      | Code complete; full live regression pending        |
-| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Release candidate prepared; promotion gated        |
+| 7     | Legacy code cleanup and dependency reduction                                      | Complete; development acceptance passed           |
+| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Dev accepted; production promotion gated           |
 
 ## Stage 4 acceptance
 
@@ -122,3 +122,24 @@ The Stage 8 release candidate uses a versioned plugin package, SHA-256
 checksums and CI tests. It is **not** an accepted production release until the
 full manual acceptance matrix passes on a development instance and the
 production migration inventory is reviewed. See [RELEASE-CANDIDATE.md](RELEASE-CANDIDATE.md).
+
+## Stage 7E / Stage 8 development acceptance — 2026-10-31
+
+The operator confirmed all live acceptance checks passed for the 4.1.0.0
+candidate built from commit `ce6dc4e89d8439c63c4964f0bb8f29512c79170a`.
+The read-only Stage 8 smoke-test suite passed **8/8** on the development
+instance, including disabled linking, malformed JSON, unknown provider,
+missing callback state, invented exchange token, anonymous administrator-route
+access and method restrictions. Jellyfin completed startup, loaded the new
+assembly and returned HTTP 200 on local and public health/provider routes.
+No invalid/missing authentication-provider warnings recurred after deployment.
+The operator additionally confirmed Keycloak login for both migrated accounts,
+repeat sign-in, native administrator recovery, unchanged manually assigned
+library permissions, provider settings persistence, restart persistence, and
+web/Android login all passed.
+
+**Development acceptance: complete. Production promotion: not yet complete.**
+Before promoting, review any remaining unmigrated legacy accounts, prepare
+production backups and a maintenance window, and verify the exact production
+artifact and rollback path. The development deployment was a DLL-only install;
+release ZIP layout and manifest replacement must be validated separately.
