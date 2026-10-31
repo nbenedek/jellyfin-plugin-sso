@@ -65,8 +65,8 @@ server-wide index.html modification is necessary.
 The provider editor now separates essential OIDC configuration from expandable
 advanced options, masks the client secret, checks the issuer URL, and explicitly
 resets the form between provider switches. Existing issuer/subject identity
-links are preserved during configuration saves. The live `development Jellyfin instance` UI
-acceptance test is still pending; see [Stage 6 verification](docs/STAGE6-UI.md).
+links are preserved during configuration saves. Stage 6 live acceptance passed;
+see [Stage 6 verification](docs/STAGE6-UI.md).
 External-login button visual styling is documented separately and is not
 automatically injected into all clients.
 
@@ -78,10 +78,9 @@ Legacy accounts created by the archived plugin may have only username-based
 checks the native plugin configuration XML round-trip, and prepares a reviewed
 administrator-approved migration without creating new accounts.
 
-**Important:** The earlier Python writer caused settings loss on development Jellyfin instance
-and must never be used with `--apply`; the old executable is unsafe. The
-replacement CLI must pass a live dry run against recovered SSO settings and
-single-user validation on development Jellyfin instance before any bulk migration.
+**Important:** The retired Python XML writer was unsafe and is no longer
+shipped. Use only the .NET CLI after reviewing a native dry run and validating
+an individually approved migration before applying any bulk changes.
 
 This is **not a general OIDC migration utility**: users of other identity
 providers must use a separately developed adapter for their directory export.

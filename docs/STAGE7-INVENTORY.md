@@ -18,7 +18,7 @@
 2. **Controller separation.** `SSO-Auth/Api/SSOController.cs` is approximately 934 lines and currently mixes callback/challenge, public token exchange, provider administration, identity resolution, and user authorization. Extract pure, testable functions first; split into public and elevated controllers only after route and policy regression tests. Preserve the existing public URLs.
 3. **Configuration compatibility.** `SSO-Auth/Config/PluginConfiguration.cs` still defines the legacy `DisableHttps` and `DoNotValidateIssuerName` XML properties. Keep them deserializable while ensuring authentication always enforces TLS and issuer validation. Do not remove legacy migration fields until migration inventory is complete.
 4. **Dependency review.** The plugin directly references Duende.IdentityModel.OidcClient 6.0.1 and Newtonsoft.Json 13.0.3 in `SSO-Auth/SSO-Auth.csproj`. Identify actual call sites and transitive constraints before replacement/removal. Avoid simultaneous client-library updates and security-sensitive refactoring.
-5. **Migration script retirement.** The repository retains `tools/migrate_legacy_oidc.py` as well as the safer native .NET 9 `SSO-Auth.Migration` CLI. Make the .NET CLI the documented path; only remove the Python writer after checking for external references and preserving needed test coverage. Never rewrite a live Jellyfin XML configuration with the legacy Python tool.
+5. **Migration script retirement.** The unsafe Python XML writer is retired. The supported offline migration path is the standalone .NET 9 `SSO-Auth.Migration` CLI. Native .NET tests cover XML round-tripping, identity collisions, approval hashes and controlled application; no plugin runtime migration behavior changes.
 6. **Login emphasis remains independent.** `docs/LOGIN-EMPHASIS.md` provides optional CSS only. Verify the actual login button markup in web and Android environments before adding styling. Never hide manual administrator login.
 
 ## Proposed Stage 7 sequence
@@ -37,6 +37,5 @@ Before Stage 8 production promotion, audit any remaining unmigrated legacy accou
 
 - `dotnet build --configuration Release --no-restore --warnaserror`
 - `dotnet test --configuration Release --no-build`
-- `python3 -m unittest discover -s tests -p 'test_*.py' -v`
 - `node --test tests/stage6-ui.test.mjs`
 - `development Jellyfin instance`: stage 4 negative access + enabled Keycloak sign-in, repeat sign-in, admin recovery, migration preservation, correct library permissions after restart.

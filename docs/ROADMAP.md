@@ -88,9 +88,18 @@ permissions remain functional after restart. No production promotion yet.
 
 ## Stage 7C OIDC client configuration consolidation
 
-The challenge and callback now share one client options factory with HTTPS and
+The challenge and callback share one client options factory with HTTPS and
 issuer validation enforced in both paths. Tests cover discovery validation,
-option overrides and scope compatibility. Live acceptance remains pending.
+option overrides and scope compatibility. Live acceptance passed on the
+development Jellyfin instance; production promotion remains gated on Stage 8.
+
+## Stage 7D migration tooling cleanup
+
+The unsafe Python migration writer and its obsolete Python test suite were
+retired. The standalone .NET 9 Keycloak-specific migration CLI remains the
+supported offline migration path, with native tests for configuration
+round-tripping, approval hashes and identity collision handling. Plugin runtime
+dependencies remain unchanged pending a separate compatibility review.
 
 ## Stage 7 cleanup checkpoint
 

@@ -1,9 +1,8 @@
 # Keycloak-only offline migration of legacy Jellyfin SSO accounts
 
-**Recovery note (October 31, 2026):** The former Python offline XML writer
-corrupted the SSO settings on development Jellyfin instance. The pre-migration backup restored
-the settings successfully. **Never use the old Python script with --apply.**
-The Python CLI remains in the repository as a read-only legacy preview.
+**Safety note:** The former Python XML writer was retired after a settings-loss
+incident. Its implementation is no longer included in this repository. Only
+the native .NET migration CLI described below is supported.
 
 The replacement is a standalone **Keycloak-specific .NET 9 CLI**:
 `jellyfin-sso-keycloak-migrate`. It imports the Keycloak Admin API's minimal
@@ -62,9 +61,9 @@ install -o root -g root -m 0755 tools/jellyfin-sso-keycloak-migrate /usr/local/s
 jellyfin-sso-keycloak-migrate --help
 ```
 
-Retire the old generic `/usr/local/sbin/jellyfin-sso-migrate` launcher after
-checking that the Keycloak-specific command works. The old Python writer must
-never be used to apply changes. Do not overwrite the working Jellyfin plugin.
+Retire any previously installed legacy Python launcher
+(`/usr/local/sbin/jellyfin-sso-migrate`) after confirming that the .NET
+Keycloak-specific command works. Do not overwrite the working Jellyfin plugin.
 
 ## Export users from Keycloak
 
