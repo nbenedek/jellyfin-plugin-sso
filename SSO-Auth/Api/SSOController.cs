@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Mime;
-using System.Reflection;
 using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
@@ -112,32 +111,12 @@ public class SSOController : ControllerBase
             }
 
             var scopes = config.OidScopes == null ? new string[2] : config.OidScopes;
-            var options = new OidcClientOptions
-            {
-                Authority = config.OidEndpoint?.Trim(),
-                ClientId = config.OidClientId?.Trim(),
-                ClientSecret = config.OidSecret?.Trim(),
-                RedirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/redirect/{provider}",
-                Scope = string.Join(" ", scopes.Prepend("openid profile")),
-                DisablePushedAuthorization = config.DisablePushedAuthorization,
-                LoggerFactory = _loggerFactory,
-                LoadProfile = !config.DoNotLoadProfile,
-                HttpClientFactory = o =>
-                {
-                    var client = _httpClientFactory.CreateClient();
-                    System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                    System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-                    string version = fvi.FileVersion;
-                    client.DefaultRequestHeaders.UserAgent.ParseAdd($"Jellyfin-Plugin-SSO-Auth +{version} (https://github.com/9p4/jellyfin-plugin-sso)");
-                    return client;
-                }
-            };
-            var oidEndpointUri = new Uri(config.OidEndpoint?.Trim());
-            options.Policy.Discovery.AdditionalEndpointBaseAddresses.Add(oidEndpointUri.GetLeftPart(UriPartial.Authority));
-            options.Policy.Discovery.ValidateEndpoints = !config.DoNotValidateEndpoints; // For Google and other providers with different endpoints
-            options.Policy.Discovery.RequireHttps = true;
-            options.Policy.Discovery.ValidateIssuerName = true;
-            var oidcClient = new OidcClient(options);
+            var oidcClient = new OidcClient(OidcClientOptionsFactory.Create(
+                config,
+                GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/redirect/{provider}",
+                scopes,
+                _loggerFactory,
+                () => _httpClientFactory.CreateClient()));
             var currentState = transaction.AuthorizeState;
             var result = await oidcClient.ProcessResponseAsync(Request.QueryString.Value, currentState).ConfigureAwait(false);
 
@@ -235,33 +214,12 @@ public class SSOController : ControllerBase
         {
             string redirectUri = GetRequestBase(config.SchemeOverride, config.PortOverride) + $"/sso/OID/redirect/{provider}";
 
-            var options = new OidcClientOptions
-            {
-                Authority = config.OidEndpoint?.Trim(),
-                ClientId = config.OidClientId?.Trim(),
-                ClientSecret = config.OidSecret?.Trim(),
-                RedirectUri = redirectUri,
-                Scope = string.Join(" ", (config.OidScopes ?? Array.Empty<string>()).Prepend("openid profile")),
-                DisablePushedAuthorization = config.DisablePushedAuthorization,
-                LoggerFactory = _loggerFactory,
-                LoadProfile = !config.DoNotLoadProfile,
-                HttpClientFactory = o =>
-                {
-                    var client = _httpClientFactory.CreateClient();
-                    System.Reflection.Assembly assembly = System.Reflection.Assembly.GetExecutingAssembly();
-                    System.Diagnostics.FileVersionInfo fvi = System.Diagnostics.FileVersionInfo.GetVersionInfo(assembly.Location);
-                    string version = fvi.FileVersion;
-
-                    client.DefaultRequestHeaders.UserAgent.ParseAdd($"Jellyfin-Plugin-SSO-Auth +{version} (https://github.com/9p4/jellyfin-plugin-sso)");
-                    return client;
-                }
-            };
-            var oidEndpointUri = new Uri(config.OidEndpoint?.Trim());
-            options.Policy.Discovery.AdditionalEndpointBaseAddresses.Add(oidEndpointUri.GetLeftPart(UriPartial.Authority));
-            options.Policy.Discovery.ValidateEndpoints = !config.DoNotValidateEndpoints; // For Google and other providers with different endpoints
-            options.Policy.Discovery.RequireHttps = true;
-            options.Policy.Discovery.ValidateIssuerName = true;
-            var oidcClient = new OidcClient(options);
+            var oidcClient = new OidcClient(OidcClientOptionsFactory.Create(
+                config,
+                redirectUri,
+                config.OidScopes ?? Array.Empty<string>(),
+                _loggerFactory,
+                () => _httpClientFactory.CreateClient()));
             var state = await oidcClient.PrepareLoginAsync().ConfigureAwait(false);
 
             if (state.IsError)

@@ -79,6 +79,19 @@ settings and navigation only. Bulk legacy migration remains a CLI operation.
 The Keycloak-specific directory JSON import adapter is not suitable for other
 OIDC providers, although the resulting issuer/subject links are provider-neutral.
 
+## Stage 7B live acceptance
+
+Stage 7B (OIDC claim evaluation extraction) passed automated checks and was
+validated on the development Jellyfin instance. Keycloak login, linked accounts,
+native administrator recovery, provider settings and manually managed library
+permissions remain functional after restart. No production promotion yet.
+
+## Stage 7C OIDC client configuration consolidation
+
+The challenge and callback now share one client options factory with HTTPS and
+issuer validation enforced in both paths. Tests cover discovery validation,
+option overrides and scope compatibility. Live acceptance remains pending.
+
 ## Stage 7 cleanup checkpoint
 
 Stage 6 accepted on development Jellyfin instance; preserve the 2026-10-31 development-branch
