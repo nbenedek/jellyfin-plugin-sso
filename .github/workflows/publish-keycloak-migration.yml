@@ -1,0 +1,118 @@
+name: Publish Keycloak migration utility 4.1.0.0
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-keycloak-migration.yml
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sso-keycloak-migration-v4.1.0.0
+  cancel-in-progress: false
+
+jobs:
+  package-and-upload:
+    if: github.repository == 'nbenedek/jellyfin-plugin-sso'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout published stable release source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: v4.1.0.0
+          persist-credentials: false
+
+      - name: Set up .NET 9
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 9.0.x
+
+      - name: Build, test and publish migration CLI
+        run: |
+          set -euo pipefail
+          dotnet restore
+          dotnet build -c Release --no-restore --warnaserror
+          dotnet test -c Release --no-build --verbosity normal
+          dotnet publish SSO-Auth.Migration/SSO-Auth.Migration.csproj \
+            --configuration Release \
+            --framework net9.0 \
+            --runtime linux-x64 \
+            --self-contained false \
+            -p:UseAppHost=false \
+            --output _migration
+          dotnet _migration/Jellyfin.SSO.KeycloakMigration.dll --help \
+            | grep -F 'Keycloak-only legacy account migration'
+          dotnet _migration/Jellyfin.SSO.KeycloakMigration.dll --help \
+            | grep -F 'Other OIDC providers'
+          test -s _migration/Jellyfin.SSO.KeycloakMigration.dll
+          test -s _migration/Jellyfin.SSO.KeycloakMigration.runtimeconfig.json
+
+      - name: Assemble installation ZIP and checksum
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile, ZIP_DEFLATED, ZipInfo
+          import hashlib
+
+          base = Path("_migration")
+          output = Path("_release")
+          output.mkdir(exist_ok=True)
+          name = "jellyfin-sso-keycloak-migrate_4.1.0.0_linux-x64.zip"
+          archive = output / name
+          readme = (
+              "Keycloak-only legacy account migration utility for SSO Authentication 4.1.0.0.\n"
+              "Requires Linux x64 and Microsoft.NETCore.App 9.0 runtime.\n"
+              "This archive does NOT replace or install the Jellyfin plugin itself.\n"
+              "Install as root:\n"
+              "  mkdir -p /opt/jellyfin-sso-keycloak-migration\n"
+              "  unzip " + name + " -d /opt/jellyfin-sso-keycloak-migration\n"
+              "  install -m 0755 /opt/jellyfin-sso-keycloak-migration/jellyfin-sso-keycloak-migrate /usr/local/sbin/jellyfin-sso-keycloak-migrate\n"
+              "  jellyfin-sso-keycloak-migrate --help\n"
+              "Read docs/CLI-MIGRATION.md in the release source before an approved apply.\n"
+              "The tool requires --users, --provider and --issuer; apply requires review hash and Jellyfin stopped.\n"
+          )
+          launcher = Path("tools/jellyfin-sso-keycloak-migrate")
+          if not launcher.is_file():
+              raise SystemExit("Missing trusted launcher script")
+          files = sorted(p for p in base.iterdir() if p.is_file())
+          if len(files) < 3:
+              raise SystemExit("Publish output unexpectedly incomplete")
+          with ZipFile(archive, "w", compression=ZIP_DEFLATED) as z:
+              for file in files:
+                  z.write(file, arcname=file.name)
+              info = ZipInfo("jellyfin-sso-keycloak-migrate")
+              info.external_attr = (0o100755 << 16)
+              info.compress_type = ZIP_DEFLATED
+              z.writestr(info, launcher.read_bytes())
+              z.writestr("README-INSTALL.txt", readme)
+          digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+          (output / (name + ".sha256")).write_text(digest + "  " + name + "\n")
+          with ZipFile(archive) as z:
+              if z.testzip() or "Jellyfin.SSO.KeycloakMigration.dll" not in z.namelist():
+                  raise SystemExit("Migration ZIP verification failed")
+          print(name, digest)
+          PY
+          (cd _release && sha256sum -c *.sha256)
+
+      - name: Upload only new migration assets to the stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view v4.1.0.0 --repo "$GITHUB_REPOSITORY" >/dev/null
+          asset="jellyfin-sso-keycloak-migrate_4.1.0.0_linux-x64.zip"
+          if gh release view v4.1.0.0 --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fxq "$asset"; then
+            echo "Migration asset already exists. Refusing to overwrite a published release."
+            exit 1
+          fi
+          gh release upload v4.1.0.0 \
+            "_release/$asset" "_release/$asset.sha256" \
+            --repo "$GITHUB_REPOSITORY"
+          gh release view v4.1.0.0 --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | grep -Fx "$asset"
