@@ -9,7 +9,7 @@ regression tests and live validation on development Jellyfin instance.
 | 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                                     |
 | 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                                     |
 | 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                                    |
-| 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                                  |
+| 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                                    |
 | 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                                    |
 | 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed)           |
 | 7     | Legacy code cleanup and dependency reduction                                      | In progress; inventory and regression-first refactor         |
