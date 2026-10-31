@@ -9,10 +9,10 @@ regression tests and live validation on development Jellyfin instance.
 | 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                                     |
 | 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                                     |
 | 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                                    |
-| 4     | API authorization, method semantics, provider security, and negative-access tests | Negative tests passed; re-enabled login confirmation pending |
+| 4     | API authorization, method semantics, provider security, and negative-access tests | Complete, manually tested                                  |
 | 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                                    |
-| 6     | Administrator interface modernization and navigation                              | Code implemented; live acceptance pending                    |
-| 7     | Legacy code cleanup and dependency reduction                                      | Planned                                                      |
+| 6     | Administrator interface modernization and navigation                              | Complete, manually tested (8/8 live checks passed)           |
+| 7     | Legacy code cleanup and dependency reduction                                      | In progress; inventory and regression-first refactor         |
 | 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Planned                                                      |
 
 ## Stage 4 acceptance
@@ -53,12 +53,14 @@ Implementation prepared for Jellyfin Web 10.11.6:
 - Administrator identity linking is collapsed by default, but its server-side
   elevation requirement is unchanged.
 
-**Live acceptance on development Jellyfin instance is pending**: sidebar visibility; no
-non-administrator access to configuration APIs; switch provider A → B → A
-without stale values; save/refresh/restart without clearing identity mappings;
-login with Keycloak; confirm native administrator recovery login. No production
-deployment before acceptance. The existing login-screen SSO button's markup
-must be verified before automatically injecting visual styling.
+**Live acceptance on development Jellyfin instance passed (2026-10-31)**: dashboard sidebar and
+legacy Settings navigation work; non-administrator configuration and identity-
+linking access is denied; provider switching resets the editor; save and restart
+preserve issuer/subject mappings, both migrated Keycloak users, and library
+permissions; both Keycloak and native administrator login work. All 8/8 reported
+acceptance checks passed. Production promotion remains gated on Stage 7/8.
+The login-screen SSO button's actual markup still needs verification before
+automatically injecting visual styling.
 
 ## Keycloak legacy-account migration — Keycloak-only CLI, not an admin UI feature
 
@@ -69,10 +71,19 @@ must be verified before automatically injecting visual styling.
 - [x] Run native .NET dry run against **recovered actual** development Jellyfin instance configuration (user confirmed).
 - [x] Migrate one reviewed legacy account and verify functionality on development Jellyfin instance (user confirmed).
 - [x] Complete the two legacy Keycloak account migrations on development Jellyfin instance (user confirmed).
-- [ ] Verify migrated users remain linked after an SSO settings edit and Jellyfin restart.
+- [x] Verify migrated users remain linked after an SSO settings edit and Jellyfin restart (Stage 6 live acceptance, 2026-10-31).
 - [ ] Review any remaining unmigrated users before production promotion.
 
 The Jellyfin Dashboard remains uncluttered: Stage 6 concerns regular SSO
 settings and navigation only. Bulk legacy migration remains a CLI operation.
 The Keycloak-specific directory JSON import adapter is not suitable for other
 OIDC providers, although the resulting issuer/subject links are provider-neutral.
+
+## Stage 7 cleanup checkpoint
+
+Stage 6 accepted on development Jellyfin instance; preserve the 2026-10-31 development-branch
+baseline until Stage 7 changes pass CI and live login tests. See
+[STAGE7-INVENTORY.md](STAGE7-INVENTORY.md) for the scoped inventory, risk order,
+and regression gates. Avoid deleting configuration schema properties solely
+because they are obsolete at runtime: existing XML installations must remain
+readable. Do not promote Stage 7 changes to production without Stage 8 audit.
