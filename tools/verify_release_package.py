@@ -48,6 +48,18 @@ def verify_package(archive: pathlib.Path, expected_version: str) -> dict:
         for key, value in expected.items():
             if metadata.get(key) != value:
                 raise ValueError(f"Incorrect {key}: {metadata.get(key)!r}")
+        description = metadata.get("description", "")
+        changelog = metadata.get("changelog", "")
+        if not isinstance(description, str) or not isinstance(changelog, str):
+            raise ValueError("Missing or invalid release description/changelog")
+        if "OpenID Connect" not in description:
+            raise ValueError("Release description must identify OpenID Connect")
+        if "github.com/nbenedek/jellyfin-plugin-sso" not in description:
+            raise ValueError("Release description must link to the maintained fork")
+        if "github.com/9p4/jellyfin-plugin-sso" in description:
+            raise ValueError("Release description links to archived upstream")
+        if expected_version not in changelog or len(changelog.strip().splitlines()) < 5:
+            raise ValueError("Missing detailed changelog for release version")
         for dll in REQUIRED_DLLS:
             if not bundle.read(dll).startswith(b"MZ"):
                 raise ValueError(f"Invalid managed assembly: {dll}")
