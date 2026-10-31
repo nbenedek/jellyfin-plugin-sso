@@ -1,7 +1,7 @@
 # Stage 6: SSO Authentication administrator UI
 
-**State:** implemented on the development branch; not yet installed or
-browser-tested on `development Jellyfin instance`.
+**State:** implemented and accepted on the development branch; all eight live
+acceptance checks passed on a development Jellyfin instance (2026-10-31).
 
 ## Dashboard navigation: no web patch required
 

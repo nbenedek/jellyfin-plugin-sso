@@ -37,7 +37,7 @@ Admin API connection.
 - Does not verify that the target Jellyfin GUID exists in the Jellyfin user
   database; **review that separately** before migration.
 
-## Install on development Jellyfin instance
+## Install on a development Jellyfin instance
 
 The standalone tool is in `SSO-Auth.Migration`. It is built and tested by
 GitHub Actions on every push alongside the plugin. Install it separately from
