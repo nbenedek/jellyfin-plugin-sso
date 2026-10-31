@@ -2,9 +2,13 @@ name: .NET
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - "dev/**"
   pull_request:
-    branches: [ main ]
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
@@ -12,14 +16,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
     - name: Setup .NET
-      uses: actions/setup-dotnet@v1
+      uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
       with:
         dotnet-version: 9.0.x
     - name: Restore dependencies
       run: dotnet restore
     - name: Build
-      run: dotnet build --no-restore --warnaserror
+      run: dotnet build --configuration Release --no-restore --warnaserror
     - name: Test
-      run: dotnet test --no-build --verbosity normal
+      run: dotnet test --configuration Release --no-build --verbosity normal
+    - name: Test Stage 6 administrator UI
+      run: node --test tests/stage6-ui.test.mjs
+    - name: Verify Keycloak-specific CLI help
+      run: |
+        dotnet SSO-Auth.Migration/bin/Release/net9.0/Jellyfin.SSO.KeycloakMigration.dll --help | grep -F 'Keycloak-only legacy account migration'
+        dotnet SSO-Auth.Migration/bin/Release/net9.0/Jellyfin.SSO.KeycloakMigration.dll --help | grep -F 'Other OIDC providers'

@@ -1,4 +1,4 @@
-.emby-textarea {
+#sso-config-page .emby-textarea {
   display: block;
   margin: 0;
   margin-bottom: 0 !important;
@@ -21,17 +21,17 @@
   width: 100%;
 }
 
-.emby-textarea::-moz-focus-inner {
+#sso-config-page .emby-textarea::-moz-focus-inner {
   border: 0;
 }
 
-.textareaLabel {
+#sso-config-page .textareaLabel {
   display: inline-block;
   transition: all 0.2s ease-out;
   margin-bottom: 0.25em;
 }
 
-.emby-textarea + .fieldDescription {
+#sso-config-page .emby-textarea + .fieldDescription {
   margin-top: 0.25em;
 }
 
@@ -59,4 +59,81 @@
 
 .sso-role-mapping-input-label {
   padding-left: 0.5em;
+}
+/* Administrative identity link rows use an explicit layout rather than Jellyfin listItem styles. */
+.sso-identity-link-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75em;
+  padding: 0.75em 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.sso-identity-link-label {
+  flex: 1 1 14em;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.sso-identity-unlink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  min-width: 5em;
+  min-height: 2.5em;
+}
+
+#sso-admin-link-results {
+  margin-top: 1em;
+}
+
+/* Stage 6: clearer defaults, expandable special cases and accessible feedback. */
+#sso-config-page .sso-overview {
+  max-width: 58rem;
+  line-height: 1.5;
+}
+
+#sso-config-page .sso-advanced-options,
+#sso-config-page .sso-identity-management {
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
+  margin: 1rem 0;
+}
+
+#sso-config-page .sso-advanced-options > summary,
+#sso-config-page .sso-identity-management > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+  line-height: 1.4;
+}
+
+#sso-config-page .sso-advanced-options > summary:focus-visible,
+#sso-config-page .sso-identity-management > summary:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+#sso-config-page .sso-advanced-options[open] > summary,
+#sso-config-page .sso-identity-management[open] > summary {
+  margin-bottom: 1rem;
+}
+
+#sso-config-page .sso-secret-toggle {
+  margin: 0.5rem 0;
+  min-height: 2.5rem;
+}
+
+#sso-config-page .sso-provider-feedback {
+  min-height: 1.4rem;
+  line-height: 1.4;
+  margin: 0.75rem 0;
+}
+
+#sso-config-page .sso-provider-feedback.sso-feedback-error {
+  color: #dc4848;
 }

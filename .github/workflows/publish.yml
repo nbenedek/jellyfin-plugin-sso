@@ -4,7 +4,9 @@ on:
   release:
     types:
       - released
-  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -24,9 +26,9 @@ jobs:
     - name: Prepare GitHub Release assets
       run: |-
         for file in ./*; do
-          md5sum ${file#./} >> ${file%.*}.md5
-          sha256sum ${file#./} >> ${file%.*}.sha256
+          sha256sum -- "$file" >> SHA256SUMS
         done
+        sha256sum -c SHA256SUMS
         ls -l
     - name: Publish output artifacts
       id: publish-assets

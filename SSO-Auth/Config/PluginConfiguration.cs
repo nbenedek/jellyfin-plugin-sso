@@ -14,15 +14,8 @@ public class PluginConfiguration : MediaBrowser.Model.Plugins.BasePluginConfigur
     /// </summary>
     public PluginConfiguration()
     {
-        SamlConfigs = new SerializableDictionary<string, SamlConfig>();
         OidConfigs = new SerializableDictionary<string, OidConfig>();
     }
-
-    /// <summary>
-    /// Gets or sets the SAML configurations available.
-    /// </summary>
-    [XmlElement("SamlConfigs")]
-    public SerializableDictionary<string, SamlConfig> SamlConfigs { get; set; }
 
     /// <summary>
     /// Gets or sets the OpenID configurations available.
@@ -32,141 +25,14 @@ public class PluginConfiguration : MediaBrowser.Model.Plugins.BasePluginConfigur
 }
 
 /// <summary>
-/// The configuration required for a SAML flow.
-/// </summary>
-[XmlRoot("PluginConfiguration")]
-public class SamlConfig
-{
-    private SerializableDictionary<string, Guid> _canonicalLinks;
-
-    /// <summary>
-    /// Gets or sets the SAML information endpoint.
-    /// </summary>
-    public string SamlEndpoint { get; set; }
-
-    /// <summary>
-    /// Gets or sets the SAML provider's client ID.
-    /// </summary>
-    public string SamlClientId { get; set; }
-
-    /// <summary>
-    /// Gets or sets the SAML public key.
-    /// </summary>
-    public string SamlCertificate { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the provider is enabled.
-    /// </summary>
-    public bool Enabled { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether RBAC is enabled.
-    /// </summary>
-    public bool EnableAuthorization { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether all folders are allowed by default.
-    /// </summary>
-    public bool EnableAllFolders { get; set; }
-
-    /// <summary>
-    /// Gets or sets what folders should users have access to by default.
-    /// </summary>
-    public string[] EnabledFolders { get; set; }
-
-    /// <summary>
-    /// Gets or sets the roles that are checked to determine whether the user is an administrator.
-    /// </summary>
-    public string[] AdminRoles { get; set; }
-
-    /// <summary>
-    /// Gets or sets what roles are checked to determine whether the user is allowed to use Jellyfin.
-    /// </summary>
-    public string[] Roles { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether RBAC is used to manage folder access.
-    /// </summary>
-    public bool EnableFolderRoles { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether RBAC is used to manage Live TV access.
-    /// </summary>
-    public bool EnableLiveTvRoles { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether Live TV is enabled by default.
-    /// </summary>
-    public bool EnableLiveTv { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether Live TV is allowed to be managed by default.
-    /// </summary>
-    public bool EnableLiveTvManagement { get; set; }
-
-    /// <summary>
-    /// Gets or sets the roles that are checked to determine whether the user is allowed to view Live TV.
-    /// </summary>
-    public string[] LiveTvRoles { get; set; }
-
-    /// <summary>
-    /// Gets or sets the roles that are checked to determine whether the user is allowed to manage Live TV.
-    /// </summary>
-    public string[] LiveTvManagementRoles { get; set; }
-
-    /// <summary>
-    /// Gets or sets which folders map to what roles in RBAC.
-    /// </summary>
-    [XmlArray("FolderRoleMappings")]
-    [XmlArrayItem(typeof(FolderRoleMap), ElementName = "FolderRoleMappings")]
-    public List<FolderRoleMap> FolderRoleMapping { get; set; }
-
-    /// <summary>
-    /// Gets or sets the default provider the user after logging in with SSO.
-    /// </summary>
-    public string DefaultProvider { get; set; }
-
-    /// <summary>
-    /// Gets or sets the redirect scheme override.
-    /// </summary>
-    public string SchemeOverride { get; set; }
-
-    /// <summary>
-    /// Gets or sets the redirect port override.
-    /// </summary>
-    public int? PortOverride { get; set; }
-
-    /// <summary>
-    /// Gets or sets a value indicating whether the new, more descriptive paths are to be used.
-    /// </summary>
-    public bool NewPath { get; set; }
-
-    /// <summary>
-    /// Gets or sets a mapping of canonical names from the provider to jellyfin user ids.
-    /// </summary>
-    [XmlElement("CanonicalLinks")]
-    public SerializableDictionary<string, Guid> CanonicalLinks
-    {
-        get
-        {
-            if (_canonicalLinks == null)
-            {
-                return new SerializableDictionary<string, Guid>();
-            }
-
-            return _canonicalLinks;
-        }
-        set => _canonicalLinks = value;
-    }
-}
-
-/// <summary>
 /// The configuration required for a OpenID flow.
 /// </summary>
 [XmlRoot("PluginConfiguration")]
 public class OidConfig
 {
     private SerializableDictionary<string, Guid> _canonicalLinks;
+    private SerializableDictionary<string, Guid> _subjectLinks;
+    private SerializableDictionary<string, string> _subjectNames;
 
     /// <summary>
     /// Gets or sets the OpenID well-known information endpoint.
@@ -276,37 +142,41 @@ public class OidConfig
     public int? PortOverride { get; set; }
 
     /// <summary>
-    /// Gets or sets a value indicating whether the new, more descriptive paths are to be used.
-    /// </summary>
-    public bool NewPath { get; set; }
-
-    /// <summary>
     /// Gets or sets a mapping of canonical names from the provider to jellyfin user ids.
     /// </summary>
     [XmlElement("CanonicalLinks")]
     public SerializableDictionary<string, Guid> CanonicalLinks
     {
-        get
-        {
-            if (_canonicalLinks == null)
-            {
-                return new SerializableDictionary<string, Guid>();
-            }
-
-            return _canonicalLinks;
-        }
+        get => _canonicalLinks ??= new SerializableDictionary<string, Guid>();
         set => _canonicalLinks = value;
+    }
+
+    /// <summary>
+    /// Gets or sets issuer-and-subject identity keys mapped to Jellyfin user IDs.
+    /// Unlike legacy canonical links, these values must never be matched by username.
+    /// </summary>
+    [XmlElement("SubjectLinks")]
+    public SerializableDictionary<string, Guid> SubjectLinks
+    {
+        get => _subjectLinks ??= new SerializableDictionary<string, Guid>();
+        set => _subjectLinks = value;
+    }
+
+    /// <summary>
+    /// Gets or sets display usernames for linked issuer-and-subject identity keys.
+    /// Display names are not used for authentication decisions.
+    /// </summary>
+    [XmlElement("SubjectNames")]
+    public SerializableDictionary<string, string> SubjectNames
+    {
+        get => _subjectNames ??= new SerializableDictionary<string, string>();
+        set => _subjectNames = value;
     }
 
     /// <summary>
     /// Gets or sets the default username claim when creating new accounts.
     /// </summary>
     public string DefaultUsernameClaim { get; set; }
-
-    /// <summary>
-    /// Gets or sets the URL format of the new user avatar.
-    /// </summary>
-    public string AvatarUrlFormat { get; set; }
 
     /// <summary>
     /// Gets or sets a value indicating whether HTTPS in the discovery endpoint is required.
