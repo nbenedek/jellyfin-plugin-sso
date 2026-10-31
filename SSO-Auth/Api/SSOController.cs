@@ -246,17 +246,28 @@ public class SSOController : ControllerBase
     /// <returns>204 when saved, or 400 for invalid input.</returns>
     [Authorize(Policy = Policies.RequiresElevation)]
     [HttpPost("OID/Add/{provider}")]
-    public ActionResult OidAdd(string provider, [FromBody] OidConfig config)
+    public async Task<ActionResult> OidAdd(string provider, [FromBody] OidConfig config)
     {
         if (string.IsNullOrWhiteSpace(provider) || config is null)
         {
             return BadRequest("A provider name and configuration are required.");
         }
 
-        var configuration = SSOPlugin.Instance.Configuration;
-        configuration.OidConfigs[provider] = config;
-        SSOPlugin.Instance.UpdateConfiguration(configuration);
-        return NoContent();
+        // Serialize provider edits with identity linking to prevent lost mappings.
+        await IdentityGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var configuration = SSOPlugin.Instance.Configuration;
+            configuration.OidConfigs.TryGetValue(provider, out var current);
+            OidcProviderConfigurationSafety.PreserveLinks(current, config);
+            configuration.OidConfigs[provider] = config;
+            SSOPlugin.Instance.UpdateConfiguration(configuration);
+            return NoContent();
+        }
+        finally
+        {
+            IdentityGate.Release();
+        }
     }
 
     /// <summary>
