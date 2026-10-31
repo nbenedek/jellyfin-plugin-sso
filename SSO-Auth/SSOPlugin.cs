@@ -35,6 +35,12 @@ public class SSOPlugin : BasePlugin<PluginConfiguration>, IPlugin, IHasWebPages
     public override string Name => "SSO-Auth";
 
     /// <summary>
+    /// Gets the description displayed by Jellyfin and persisted to meta.json.
+    /// Jellyfin refreshes this from the plugin instance when starting.
+    /// </summary>
+    public override string Description => "Sign in using OpenID Connect (OIDC), with secure issuer/subject identity matching and administrator-controlled account linking. Documentation: https://github.com/nbenedek/jellyfin-plugin-sso";
+
+    /// <summary>
     /// Gets the GUID of the SSO plugin.
     /// </summary>
     public override Guid Id => Guid.Parse("505ce9d1-d916-42fa-86ca-673ef241d7df");

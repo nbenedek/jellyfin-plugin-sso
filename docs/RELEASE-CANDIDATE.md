@@ -132,3 +132,23 @@ previous version directory to a private backup location first. The plugin
 configuration at `plugins/configurations/SSO-Auth.xml` is not packaged and must
 not be replaced with generic defaults. After successful installation, verify
 both the reported plugin version and the authentication flow before promotion.
+
+## Jellyfin 10.11 plugin description persistence
+
+Jellyfin refreshes `meta.json` from the live `SSOPlugin.Name` and `SSOPlugin.Description`
+properties when loading an installed plugin of the same version. The base
+implementation returns an empty description. This fork overrides `Description`
+in the plugin assembly; installing only an edited `meta.json` will not survive
+a restart without the corresponding updated DLL. Keep `Name` as `SSO-Auth`
+and preserve the existing GUID and `SSO-Auth.xml` configuration identity.
+
+The dashboard's **Revision History** comes from the configured repository
+catalog, not the local `meta.json` changelog. Publishing the fork's own
+`manifest-release/manifest.json` is a separate release step. Do not confuse
+its entries with the locally installed plugin metadata.
+
+Jellyfin writes `meta.json` during startup: ensure the `jellyfin` service
+account owns and can write it. Do not use `root:root` mode 0644 for a
+replacement manifest; this caused a verified startup failure during
+metadata-only validation. Replacing plugin assemblies also requires a full
+Jellyfin restart and a backup.
