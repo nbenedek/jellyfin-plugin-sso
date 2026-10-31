@@ -27,3 +27,9 @@ jobs:
       run: dotnet build --configuration Release --no-restore --warnaserror
     - name: Test
       run: dotnet test --configuration Release --no-build --verbosity normal
+    - name: Test offline migration CLI
+      run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+    - name: Verify Keycloak-specific CLI help
+      run: |
+        dotnet SSO-Auth.Migration/bin/Release/net9.0/Jellyfin.SSO.KeycloakMigration.dll --help | grep -F 'Keycloak-only legacy account migration'
+        dotnet SSO-Auth.Migration/bin/Release/net9.0/Jellyfin.SSO.KeycloakMigration.dll --help | grep -F 'Other OIDC providers'

@@ -42,3 +42,20 @@ Implementation acceptance:
 - Prioritize the external SSO sign-in button without removing native Jellyfin login.
 
 Navigation is a Stage 6 feature and is intentionally **not implemented** by the Stage 4 API changes.
+
+## Keycloak legacy-account migration — Keycloak-only CLI, not an admin UI feature
+
+- [x] Standalone .NET offline CLI to import Keycloak user JSON and preview migrations.
+- [x] Replace unsafe Python XML writer with a separate .NET 9 CLI using actual plugin configuration types.
+- [x] Native XmlSerializer preservation tests, collisions, approval hash and private backups in CI.
+- [x] Restore development Jellyfin instance settings after the Python XML rewrite (confirmed by user).
+- [x] Run native .NET dry run against **recovered actual** development Jellyfin instance configuration (user confirmed).
+- [x] Migrate one reviewed legacy account and verify functionality on development Jellyfin instance (user confirmed).
+- [ ] Perform bulk migration only after the single-user validation passes.
+- [ ] Manually validate a representative legacy-only account on development Jellyfin instance.
+- [ ] Audit a complete export and migrate the remaining legacy mappings after review.
+
+The Jellyfin Dashboard remains uncluttered: Stage 6 concerns regular SSO
+settings and navigation only. Bulk legacy migration remains a CLI operation.
+The Keycloak-specific directory JSON import adapter is not suitable for other
+OIDC providers, although the resulting issuer/subject links are provider-neutral.

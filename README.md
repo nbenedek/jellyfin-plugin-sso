@@ -54,6 +54,29 @@ to know the identity provider user's password or trigger a public linking callba
 Keep the issuer and subject exact: a mismatched value will not match the validated
 OIDC identity during login. Existing links remain intact across upgrades.
 
+### Keycloak-only legacy SSO migration (standalone CLI)
+
+Legacy accounts created by the archived plugin may have only username-based
+`CanonicalLinks` and fail modern OIDC sign-in with HTTP 409. The replacement
+**`jellyfin-sso-keycloak-migrate`** .NET 9 CLI imports a minimal **Keycloak** JSON user export,
+checks the native plugin configuration XML round-trip, and prepares a reviewed
+administrator-approved migration without creating new accounts.
+
+**Important:** The earlier Python writer caused settings loss on development Jellyfin instance
+and must never be used with `--apply`; the old executable is unsafe. The
+replacement CLI must pass a live dry run against recovered SSO settings and
+single-user validation on development Jellyfin instance before any bulk migration.
+
+This is **not a general OIDC migration utility**: users of other identity
+providers must use a separately developed adapter for their directory export.
+The migration produces standard OIDC issuer/subject links, but assumes the
+source export is from Keycloak. Neither the provider name nor the JSON shape
+proves that the export was actually obtained from Keycloak.
+
+**No migration controls are added to the Jellyfin UI.** See the
+[offline migration guide](docs/CLI-MIGRATION.md). Identity links are still
+never established automatically from a sign-in username.
+
 ## Current State:
 
 This is 100% alpha software! PRs are welcome to improve the code.

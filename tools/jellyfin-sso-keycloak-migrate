@@ -1,0 +1,6 @@
+#!/bin/sh
+# Keycloak-only migration tool. This wrapper does not change the Jellyfin plugin.
+if [ -x /opt/dotnet/dotnet ]; then
+    exec /opt/dotnet/dotnet /opt/jellyfin-sso-keycloak-migration/Jellyfin.SSO.KeycloakMigration.dll "$@"
+fi
+exec dotnet /opt/jellyfin-sso-keycloak-migration/Jellyfin.SSO.KeycloakMigration.dll "$@"

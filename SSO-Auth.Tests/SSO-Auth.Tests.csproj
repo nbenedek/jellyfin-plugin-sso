@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SSO-Auth\SSO-Auth.csproj" />
+    <ProjectReference Include="..\SSO-Auth.Migration\SSO-Auth.Migration.csproj" />
   </ItemGroup>
 
 </Project>
