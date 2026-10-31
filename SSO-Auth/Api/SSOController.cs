@@ -81,6 +81,7 @@ public class SSOController : ControllerBase
     /// <param name="state">The current request state.</param>
     /// <returns>A webpage that will complete the client-side flow.</returns>
     // Actually a GET: https://github.com/IdentityModel/IdentityModel.OidcClient/issues/325
+    [AllowAnonymous]
     [HttpGet("OID/redirect/{provider}")]
     public async Task<ActionResult> OidPost(
         [FromRoute] string provider,
@@ -96,8 +97,13 @@ public class SSOController : ControllerBase
             return BadRequest("No matching provider found");
         }
 
-        if (config.Enabled)
+        if (config?.Enabled == true)
         {
+            if (!OidcProviderSecurityPolicy.IsSecureForAuthentication(config))
+            {
+                return BadRequest(OidcProviderSecurityPolicy.ConfigurationError);
+            }
+
             if (string.IsNullOrEmpty(state))
             {
                 return BadRequest("Missing state");
@@ -132,8 +138,8 @@ public class SSOController : ControllerBase
             var oidEndpointUri = new Uri(config.OidEndpoint?.Trim());
             options.Policy.Discovery.AdditionalEndpointBaseAddresses.Add(oidEndpointUri.GetLeftPart(UriPartial.Authority));
             options.Policy.Discovery.ValidateEndpoints = !config.DoNotValidateEndpoints; // For Google and other providers with different endpoints
-            options.Policy.Discovery.RequireHttps = !config.DisableHttps;
-            options.Policy.Discovery.ValidateIssuerName = !config.DoNotValidateIssuerName;
+            options.Policy.Discovery.RequireHttps = true;
+            options.Policy.Discovery.ValidateIssuerName = true;
             var oidcClient = new OidcClient(options);
             var currentState = transaction.AuthorizeState;
             var result = await oidcClient.ProcessResponseAsync(Request.QueryString.Value, currentState).ConfigureAwait(false);
@@ -141,6 +147,11 @@ public class SSOController : ControllerBase
             if (result.IsError)
             {
                 return ReturnError(StatusCodes.Status400BadRequest, $"Error logging in: {result.Error} - {result.ErrorDescription}");
+            }
+
+            if (result.User is null)
+            {
+                return ReturnError(StatusCodes.Status401Unauthorized, "OIDC response did not contain an authenticated principal");
             }
 
             // ProcessResponseAsync has already validated the ID token. The issuer and subject
@@ -264,7 +275,7 @@ public class SSOController : ControllerBase
                             // Get allowed folders from roles
                             if (config.EnableFolderRoles)
                             {
-                                foreach (FolderRoleMap folderRoleMap in config.FolderRoleMapping)
+                                foreach (FolderRoleMap folderRoleMap in config.FolderRoleMapping ?? new List<FolderRoleMap>())
                                 {
                                     if (role.Equals(folderRoleMap.Role?.Trim()))
                                     {
@@ -312,7 +323,7 @@ public class SSOController : ControllerBase
                     if (claim.Type == "sub")
                     {
                         username = claim.Value;
-                        if (config.Roles.Length == 0)
+                        if (config.Roles == null || config.Roles.Length == 0)
                         {
                             isValid = true;
                         }
@@ -347,10 +358,9 @@ public class SSOController : ControllerBase
             else
             {
                 _logger.LogWarning(
-                    "OpenID user {Username} has one or more incorrect role claims: {@Claims}. Expected any one of: {@ExpectedClaims}",
-                    username,
-                    result.User.Claims.Select(o => new { o.Type, o.Value }),
-                    config.Roles);
+                    "OIDC login rejected for provider {Provider}: expected roles not found. Claim types: {@ClaimTypes}",
+                    provider,
+                    result.User.Claims.Select(claim => claim.Type).Distinct().ToArray());
 
                 return ReturnError(StatusCodes.Status401Unauthorized, "Error. Check permissions.");
             }
@@ -366,6 +376,7 @@ public class SSOController : ControllerBase
     /// <param name="provider">The name of the provider.</param>
     /// <param name="isLinking">Whether or not this request is to link accounts (Rather than authenticate).</param>
     /// <returns>An asynchronous result for the authentication.</returns>
+    [AllowAnonymous]
     [HttpGet("OID/p/{provider}")]
     [HttpGet("OID/start/{provider}")]
     public async Task<ActionResult> OidChallenge(string provider, [FromQuery] bool isLinking = false)
@@ -375,14 +386,14 @@ public class SSOController : ControllerBase
             return StatusCode(StatusCodes.Status403Forbidden, "Self-service OIDC linking is disabled.");
         }
 
-        OidConfig config;
-        try
+        if (!SSOPlugin.Instance.Configuration.OidConfigs.TryGetValue(provider, out var config) || config?.Enabled != true)
         {
-            config = SSOPlugin.Instance.Configuration.OidConfigs[provider];
+            return BadRequest("No matching provider found");
         }
-        catch (KeyNotFoundException)
+
+        if (!OidcProviderSecurityPolicy.IsSecureForAuthentication(config))
         {
-            throw new ArgumentException("Provider does not exist");
+            return BadRequest(OidcProviderSecurityPolicy.ConfigurationError);
         }
 
         if (config.Enabled)
@@ -395,7 +406,7 @@ public class SSOController : ControllerBase
                 ClientId = config.OidClientId?.Trim(),
                 ClientSecret = config.OidSecret?.Trim(),
                 RedirectUri = redirectUri,
-                Scope = string.Join(" ", config.OidScopes.Prepend("openid profile")),
+                Scope = string.Join(" ", (config.OidScopes ?? Array.Empty<string>()).Prepend("openid profile")),
                 DisablePushedAuthorization = config.DisablePushedAuthorization,
                 LoggerFactory = _loggerFactory,
                 LoadProfile = !config.DoNotLoadProfile,
@@ -413,8 +424,8 @@ public class SSOController : ControllerBase
             var oidEndpointUri = new Uri(config.OidEndpoint?.Trim());
             options.Policy.Discovery.AdditionalEndpointBaseAddresses.Add(oidEndpointUri.GetLeftPart(UriPartial.Authority));
             options.Policy.Discovery.ValidateEndpoints = !config.DoNotValidateEndpoints; // For Google and other providers with different endpoints
-            options.Policy.Discovery.RequireHttps = !config.DisableHttps;
-            options.Policy.Discovery.ValidateIssuerName = !config.DoNotValidateIssuerName;
+            options.Policy.Discovery.RequireHttps = true;
+            options.Policy.Discovery.ValidateIssuerName = true;
             var oidcClient = new OidcClient(options);
             var state = await oidcClient.PrepareLoginAsync().ConfigureAwait(false);
 
@@ -431,7 +442,7 @@ public class SSOController : ControllerBase
             return Redirect(state.StartUrl);
         }
 
-        throw new ArgumentException("Provider does not exist");
+        return BadRequest("No matching provider found");
     }
 
     /// <summary>
@@ -439,26 +450,39 @@ public class SSOController : ControllerBase
     /// </summary>
     /// <param name="provider">The name of the provider to add.</param>
     /// <param name="config">The OID configuration (deserialized from a JSON post).</param>
+    /// <returns>204 when saved, or 400 for invalid input.</returns>
     [Authorize(Policy = Policies.RequiresElevation)]
     [HttpPost("OID/Add/{provider}")]
-    public void OidAdd(string provider, [FromBody] OidConfig config)
+    public ActionResult OidAdd(string provider, [FromBody] OidConfig config)
     {
+        if (string.IsNullOrWhiteSpace(provider) || config is null)
+        {
+            return BadRequest("A provider name and configuration are required.");
+        }
+
         var configuration = SSOPlugin.Instance.Configuration;
         configuration.OidConfigs[provider] = config;
         SSOPlugin.Instance.UpdateConfiguration(configuration);
+        return NoContent();
     }
 
     /// <summary>
     /// Deletes an OpenID provider.
     /// </summary>
     /// <param name="provider">Name of provider to delete.</param>
+    /// <returns>204 when deleted, or 404 for an unknown provider.</returns>
     [Authorize(Policy = Policies.RequiresElevation)]
-    [HttpGet("OID/Del/{provider}")]
-    public void OidDel(string provider)
+    [HttpDelete("OID/Del/{provider}")]
+    public ActionResult OidDel(string provider)
     {
         var configuration = SSOPlugin.Instance.Configuration;
-        configuration.OidConfigs.Remove(provider);
+        if (!configuration.OidConfigs.Remove(provider))
+        {
+            return NotFound("No matching provider found");
+        }
+
         SSOPlugin.Instance.UpdateConfiguration(configuration);
+        return NoContent();
     }
 
     /// <summary>
@@ -476,10 +500,14 @@ public class SSOController : ControllerBase
     /// Lists the OpenID providers names only.
     /// </summary>
     /// <returns>The list of OpenID configurations.</returns>
+    [AllowAnonymous]
     [HttpGet("OID/GetNames")]
     public ActionResult OidProviderNames()
     {
-        return Ok(SSOPlugin.Instance.Configuration.OidConfigs.Keys);
+        return Ok(SSOPlugin.Instance.Configuration.OidConfigs
+            .Where(provider => provider.Value?.Enabled == true)
+            .Select(provider => provider.Key)
+            .ToArray());
     }
 
     /// <summary>
@@ -488,6 +516,7 @@ public class SSOController : ControllerBase
     /// <param name="provider">Name of provider to authenticate against.</param>
     /// <param name="response">The data passed to the client to ensure it is the right one.</param>
     /// <returns>JSON for the client to populate information with.</returns>
+    [AllowAnonymous]
     [HttpPost("OID/Auth/{provider}")]
     [Consumes(MediaTypeNames.Application.Json)]
     [Produces(MediaTypeNames.Application.Json)]
@@ -503,9 +532,19 @@ public class SSOController : ControllerBase
             return BadRequest("No matching provider found");
         }
 
-        if (!config.Enabled)
+        if (config?.Enabled != true)
         {
             return BadRequest("No matching provider found");
+        }
+
+        if (!OidcProviderSecurityPolicy.IsSecureForAuthentication(config))
+        {
+            return BadRequest(OidcProviderSecurityPolicy.ConfigurationError);
+        }
+
+        if (string.IsNullOrWhiteSpace(response?.Data))
+        {
+            return BadRequest("Missing OIDC exchange token");
         }
 
         if (!_transactionStore.TryConsume(provider, response.Data, OidcLoginPurpose.Authenticate, out var transaction))
@@ -543,12 +582,22 @@ public class SSOController : ControllerBase
     /// <returns>Whether this API endpoint succeeded.</returns>
     [Authorize(Policy = Policies.RequiresElevation)]
     [HttpPost("Unregister/{username}")]
-    public ActionResult Unregister(string username, [FromBody] string provider)
+    public async Task<ActionResult> Unregister(string username, [FromBody] string provider)
     {
-        User user = _userManager.GetUserByName(username);
-        user.AuthenticationProviderId = provider;
+        if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(provider))
+        {
+            return BadRequest("A username and authentication provider are required.");
+        }
 
-        return Ok();
+        User user = _userManager.GetUserByName(username);
+        if (user is null)
+        {
+            return NotFound("No matching Jellyfin user found.");
+        }
+
+        user.AuthenticationProviderId = provider;
+        await _userManager.UpdateUserAsync(user).ConfigureAwait(false);
+        return NoContent();
     }
 
     private async Task<Guid> ResolveOidcIdentityAsync(string provider, OidcValidatedLogin login)
@@ -557,17 +606,25 @@ public class SSOController : ControllerBase
         try
         {
             var configuration = SSOPlugin.Instance.Configuration;
-            if (!configuration.OidConfigs.TryGetValue(provider, out var config) || !config.Enabled)
+            if (!configuration.OidConfigs.TryGetValue(provider, out var config) || config?.Enabled != true)
             {
+                _logger.LogWarning("OIDC resolver rejected sign-in: provider {Provider} not configured or disabled.", provider);
                 return Guid.Empty;
             }
 
+            // Only a short prefix of the already-hashed issuer/subject identity key
+            // is logged. Never log the raw claims, ID token, credentials, or username.
+            var identityFingerprint = login.IdentityKey.Substring("oidc-v1-".Length, 12);
             var userId = OidcIdentityLinks.Find(config, login.IdentityKey);
             if (userId != Guid.Empty)
             {
                 if (_userManager.GetUserById(userId) is null)
                 {
                     // A stale mapping must not silently create or claim another account.
+                    _logger.LogWarning(
+                        "OIDC resolver rejected sign-in: linked Jellyfin account missing. Provider {Provider}; fingerprint {Fingerprint}.",
+                        provider,
+                        identityFingerprint);
                     return Guid.Empty;
                 }
 
@@ -584,9 +641,19 @@ public class SSOController : ControllerBase
             // There must be no fallback to CanonicalLinks or GetUserByName for authentication.
             // Users with pre-existing Jellyfin or legacy SSO accounts must explicitly link
             // from a session authorized to modify that account.
-            if (_userManager.GetUserByName(login.Username) is not null
-                || config.CanonicalLinks.ContainsKey(login.Username))
+            var existingUsername = _userManager.GetUserByName(login.Username) is not null;
+            var legacyUsernameMapping = config.CanonicalLinks.ContainsKey(login.Username);
+            if (existingUsername || legacyUsernameMapping)
             {
+                _logger.LogWarning(
+                    "OIDC resolver rejected sign-in: no subject link matches. Provider {Provider}; fingerprint {Fingerprint}; issuerMatchesAuthority {IssuerMatchesAuthority}; subjectLinks {SubjectLinks}; linkedDisplayNameMatches {DisplayNameMatches}; jellyfinUsernameExists {UsernameExists}; legacyUsernameMapping {LegacyUsernameMapping}.",
+                    provider,
+                    identityFingerprint,
+                    string.Equals(login.Issuer, config.OidEndpoint?.Trim(), StringComparison.Ordinal),
+                    config.SubjectLinks.Count,
+                    config.SubjectNames.Values.Any(name => string.Equals(name, login.Username, StringComparison.Ordinal)),
+                    existingUsername,
+                    legacyUsernameMapping);
                 return Guid.Empty;
             }
 

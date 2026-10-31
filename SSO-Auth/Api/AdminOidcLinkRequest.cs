@@ -4,7 +4,7 @@ namespace Jellyfin.Plugin.SSO_Auth.Api;
 
 /// <summary>
 /// Administrator-supplied identity details for explicitly linking an existing Jellyfin account.
-/// The subject is the immutable OIDC subject (Keycloak user ID), not a display username.
+/// The subject is the immutable OIDC sub claim, not an email or display username.
 /// </summary>
 public sealed class AdminOidcLinkRequest
 {

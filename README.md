@@ -109,11 +109,12 @@ The nightly build may have new features unavailable in other builds, but **be wa
 
 ## Roadmap
 
-- [x] Admin page
-- [ ] Automated tests
-- [x] Add role/claims support
-- [x] Use canonical usernames instead of preferred usernames
-- [x] Replace user self-service with administrator-only identity linking
+See [development roadmap](docs/ROADMAP.md) for security, administration, and release milestones.
+
+- [x] OIDC issuer/subject identity binding and administrator-only account linking
+- [x] Automatic tests for transaction security and stable identity mapping
+- [ ] Complete API security hardening and live negative-access tests
+- [ ] Make SSO settings accessible directly from the Jellyfin Dashboard left sidebar (Stage 6)
 - [ ] Finalize RBAC access for all user properties
 
 ## Examples

@@ -1,0 +1,44 @@
+# SSO Authentication development roadmap
+
+This file tracks the `dev/oidc-security-refactor` branch. Jellyfin 10.11.6 is
+the primary development target. Stage acceptance requires both automated
+regression tests and live validation on development Jellyfin instance.
+
+| Stage | Scope                                                                             | Status                                         |
+| ----- | --------------------------------------------------------------------------------- | ---------------------------------------------- |
+| 1     | OIDC-only baseline; remove SAML and obsolete public assets                        | Complete                                       |
+| 2     | One-time, expiring, provider-bound OIDC login transactions                        | Complete                                       |
+| 3     | Stable issuer/subject identity; administrator-controlled account linking          | Complete, manually tested                      |
+| 4     | API authorization, method semantics, provider security, and negative-access tests | Code hardening in progress; live tests pending |
+| 5     | Jellyfin 10.11 authorization and restart persistence                              | Complete, manually tested                      |
+| 6     | Administrator interface modernization and navigation                              | Planned                                        |
+| 7     | Legacy code cleanup and dependency reduction                                      | Planned                                        |
+| 8     | End-to-end security audit, release packaging, versioning, dev-to-prod promotion   | Planned                                        |
+
+## Stage 4 acceptance
+
+- Public OIDC challenge, callback, exchange and enabled-provider discovery remain operational.
+- All configuration, provider deletion, authentication-provider switching and identity-link management endpoints require Jellyfin's elevated administrator policy.
+- Provider deletion uses DELETE, never GET.
+- Only enabled OIDC provider names are exposed from public discovery.
+- Malformed or absent exchange credentials and unknown providers fail cleanly.
+- HTTPS discovery and issuer-name validation cannot be bypassed by deprecated settings.
+- Log messages never dump OIDC claim values for rejected sign-ins.
+- Unit tests and Release build pass; run live unauthenticated and ordinary-user negative tests before declaring the stage complete.
+
+## Stage 6: Dashboard administration
+
+**Requirement:** An administrator must be able to open SSO Authentication
+settings directly from the **Dashboard left navigation panel**, without
+visiting Plugins → SSO Authentication → Settings.
+
+Implementation acceptance:
+
+- A clearly named SSO Authentication entry is discoverable in the Dashboard sidebar.
+- Only administrators can access its settings, including the identity-linking UI.
+- Retain or redirect the existing Plugins → Settings entry for compatibility.
+- Preserve provider-neutral terminology and the native administrator recovery login.
+- Simplify OIDC configuration and improve validation; no manual JSON editing.
+- Prioritize the external SSO sign-in button without removing native Jellyfin login.
+
+Navigation is a Stage 6 feature and is intentionally **not implemented** by the Stage 4 API changes.
