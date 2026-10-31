@@ -1,0 +1,152 @@
+name: Publish first stable SSO release
+
+on:
+  push:
+    branches:
+      - release/v4.1.0.0
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-sso-4.1.0.0
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'nbenedek/jellyfin-plugin-sso' && github.ref == 'refs/heads/release/v4.1.0.0'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout accepted release commit
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: true
+      - name: Verify release source matches accepted build
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin 45ffb412ff2c8174333eefdc63444341ab5038d5
+          git merge-base --is-ancestor 45ffb412ff2c8174333eefdc63444341ab5038d5 HEAD
+          git diff --exit-code 45ffb412ff2c8174333eefdc63444341ab5038d5 HEAD -- \
+            SSO-Auth/ SSO-Auth.Tests/ SSO-Auth.Migration/ \
+            build.yaml tools/verify_release_package.py \
+            tests/test_release_package.py
+      - name: Configure .NET 9
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 9.0.x
+      - name: Build and test
+        run: |
+          set -euo pipefail
+          dotnet restore
+          dotnet build -c Release --no-restore --warnaserror
+          dotnet test -c Release --no-build --verbosity normal
+          python3 -m unittest discover -s tests -p 'test_release_package.py' -v
+          node --test tests/stage6-ui.test.mjs
+          bash -n tools/stage8-smoke.sh
+      - name: Build Jellyfin plugin ZIP
+        id: jprm
+        uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d # v1.1.1
+        with:
+          dotnet-target: net9.0
+      - name: Validate package and prepare release data
+        env:
+          PACKAGE: ${{ steps.jprm.outputs.artifact }}
+        run: |
+          set -euo pipefail
+          python3 tools/verify_release_package.py "$PACKAGE" 4.1.0.0
+          mkdir -p _release
+          cp "$PACKAGE" _release/
+          cd _release
+          test "$(basename "$PACKAGE")" = 'sso-authentication_4.1.0.0.zip'
+          sha256sum sso-authentication_4.1.0.0.zip > SHA256SUMS
+          sha256sum -c SHA256SUMS
+          md5sum sso-authentication_4.1.0.0.zip > MD5SUMS
+      - name: Build Jellyfin repository manifest
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import datetime
+          import hashlib
+          import json
+          from pathlib import Path
+          from zipfile import ZipFile
+
+          bundle = Path("_release/sso-authentication_4.1.0.0.zip")
+          with ZipFile(bundle) as archive:
+              metadata = json.loads(archive.read("meta.json"))
+          expected = {
+              "guid": "505ce9d1-d916-42fa-86ca-673ef241d7df",
+              "version": "4.1.0.0",
+              "targetAbi": "10.11.0.0",
+              "owner": "nbenedek"
+          }
+          for key, value in expected.items():
+              if metadata.get(key) != value:
+                  raise SystemExit(f"Invalid {key} in packaged metadata")
+          description = metadata.get("description", "").strip()
+          if not description or "github.com/nbenedek/jellyfin-plugin-sso" not in description:
+              raise SystemExit("Unexpected description")
+          url = "https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.1.0.0/sso-authentication_4.1.0.0.zip"
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          if "## 4.1.0.0" not in changelog:
+              raise SystemExit("Missing release notes")
+          version = {
+              "changelog": changelog,
+              "checksum": hashlib.md5(bundle.read_bytes()).hexdigest(),
+              "sourceUrl": url,
+              "targetAbi": "10.11.0.0",
+              "timestamp": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+              "version": "4.1.0.0",
+          }
+          data = [{
+              "category": "Authentication",
+              "description": description,
+              "guid": expected["guid"],
+              "name": "SSO Authentication",
+              "overview": "OIDC-only authentication for Jellyfin 10.11 with secure identity linking.",
+              "owner": "nbenedek",
+              "versions": [version],
+          }]
+          Path("_release/manifest.json").write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+          PY
+      - name: Publish GitHub release and its verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v4.1.0.0 >/dev/null 2>&1; then
+            echo "Release already exists; refusing to overwrite it."
+            exit 1
+          fi
+          gh release create v4.1.0.0 \
+            _release/sso-authentication_4.1.0.0.zip \
+            _release/SHA256SUMS \
+            _release/MD5SUMS \
+            --target "${GITHUB_SHA}" \
+            --title "SSO Authentication 4.1.0.0" \
+            --notes-file CHANGELOG.md \
+            --latest
+      - name: Verify public asset URL and publish catalog branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release view v4.1.0.0 --json assets --jq '.assets[].name' | grep -Fx 'sso-authentication_4.1.0.0.zip'
+          curl --fail --location --retry 4 --retry-delay 2 \
+            --output "${RUNNER_TEMP}/published.zip" \
+            'https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.1.0.0/sso-authentication_4.1.0.0.zip'
+          cmp "${RUNNER_TEMP}/published.zip" _release/sso-authentication_4.1.0.0.zip
+          cp _release/manifest.json "${RUNNER_TEMP}/sso-manifest.json"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git ls-remote --exit-code --heads origin manifest-release; then
+            echo "manifest-release already exists; refusing to overwrite it."
+            exit 1
+          fi
+          git checkout --orphan manifest-release
+          git rm -rf -q . || true
+          cp "${RUNNER_TEMP}/sso-manifest.json" manifest.json
+          git add manifest.json
+          git commit -m "publish: SSO Authentication 4.1.0.0 Jellyfin catalog"
+          git push origin HEAD:refs/heads/manifest-release
