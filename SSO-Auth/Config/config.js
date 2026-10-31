@@ -1,15 +1,20 @@
 const ssoConfigurationPage = {
   pluginUniqueId: "505ce9d1-d916-42fa-86ca-673ef241d7df",
-  loadConfiguration: (page) => {
-    ApiClient.getPluginConfiguration(ssoConfigurationPage.pluginUniqueId).then(
-      (config) => {
-        ssoConfigurationPage.populateProviders(page, config.OidConfigs);
-        ssoConfigurationPage.populateLinkProviders(page, config.OidConfigs);
-      },
-    );
-
-    const folder_container = page.querySelector("#EnabledFolders");
-    ssoConfigurationPage.populateFolders(folder_container);
+  loadConfiguration: async (page) => {
+    try {
+      const config = await ApiClient.getPluginConfiguration(
+        ssoConfigurationPage.pluginUniqueId,
+      );
+      ssoConfigurationPage.populateProviders(page, config.OidConfigs || {});
+      ssoConfigurationPage.populateLinkProviders(page, config.OidConfigs || {});
+      await ssoConfigurationPage.populateFolders(
+        page.querySelector("#EnabledFolders"),
+      );
+    } catch (error) {
+      ssoConfigurationPage.setProviderFeedback(
+        page, "Could not load SSO provider settings: " + (error?.message || error), true,
+      );
+    }
   },
   populateProviders: (page, providers) => {
     // Clear providers in case there are out of date ones
@@ -29,8 +34,9 @@ const ssoConfigurationPage = {
     });
   },
   populateEnabledFolders: (folder_list, container) => {
+    const allowed = Array.isArray(folder_list) ? folder_list : [];
     container.querySelectorAll(".folder-checkbox").forEach((e) => {
-      e.checked = folder_list.includes(e.getAttribute("data-id"));
+      e.checked = allowed.includes(e.getAttribute("data-id"));
     });
   },
   serializeEnabledFolders: (container) => {
@@ -54,23 +60,19 @@ const ssoConfigurationPage = {
   folders.Items: array of objects, with .Id & .Name
   */
   _populateFolders: (container, folders) => {
-    container
-      .querySelectorAll(".emby-checkbox-label")
-      .forEach((e) => e.remove());
+    container.replaceChildren();
 
-    const checkboxes = folders.Items.map((folder) => {
-      var out = document.createElement("label");
-
-      out.innerHTML = `
-        <input
-          is="emby-checkbox"
-          class="folder-checkbox chkFolder"
-          data-id="${folder.Id}"
-          type="checkbox"
-        />
-        <span>${folder.Name}</span>
-      `;
-
+    // Never insert administrator-controlled library names through innerHTML.
+    const checkboxes = (folders.Items || []).map((folder) => {
+      const out = document.createElement("label");
+      const input = document.createElement("input");
+      input.setAttribute("is", "emby-checkbox");
+      input.className = "folder-checkbox chkFolder";
+      input.setAttribute("data-id", folder.Id);
+      input.type = "checkbox";
+      const name = document.createElement("span");
+      name.textContent = folder.Name;
+      out.append(input, name);
       return out;
     });
 
@@ -79,11 +81,12 @@ const ssoConfigurationPage = {
     });
   },
 
-  populateRoleMappings: (folder_role_mappings, container) => {
+  populateRoleMappings: async (folder_role_mappings, container) => {
     container
       .querySelectorAll(".sso-role-mapping-container")
       .forEach((e) => e.remove());
 
+    const pending = [];
     const mapping_elements = folder_role_mappings.map((mapping) => {
       var elem = document.createElement("div");
 
@@ -113,16 +116,13 @@ const ssoConfigurationPage = {
       `;
 
       var checklist = elem.querySelector(".sso-folder-list");
-      const enabled_folders = mapping["Folders"];
+      const enabled_folders = mapping["Folders"] || [];
 
-      ssoConfigurationPage
-        .populateFolders(checklist)
-        .then(() =>
-          ssoConfigurationPage.populateEnabledFolders(
-            enabled_folders,
-            checklist,
-          ),
-        );
+      pending.push(
+        ssoConfigurationPage.populateFolders(checklist).then(() =>
+          ssoConfigurationPage.populateEnabledFolders(enabled_folders, checklist),
+        ),
+      );
 
       elem.querySelector(".sso-role-mapping-name").value = mapping["Role"];
       elem
@@ -136,12 +136,11 @@ const ssoConfigurationPage = {
     });
 
     mapping_elements.forEach((e) => container.appendChild(e));
+    await Promise.all(pending);
   },
   serializeRoleMappings: (container) => {
     var out = [];
-    const roles = [
-      ...container.querySelectorAll(".sso-role-mapping-container"),
-    ].forEach((elem) => {
+    [...container.querySelectorAll(".sso-role-mapping-container")].forEach((elem) => {
       const role = elem.querySelector(".sso-role-mapping-name").value;
       const checklist = elem.querySelector(".sso-folder-list");
 
@@ -168,9 +167,9 @@ const ssoConfigurationPage = {
 
     const oidc_form = page.querySelector("#sso-new-oidc-provider");
 
-    const text_fields = [...oidc_form.querySelectorAll(text_class)].map(
-      (e) => e.id,
-    );
+    const text_fields = [...oidc_form.querySelectorAll(text_class)]
+      .map((e) => e.id)
+      .filter((id) => id !== "OidProviderName");
 
     const json_fields = [...oidc_form.querySelectorAll(json_class)].map(
       (e) => e.id,
@@ -209,152 +208,251 @@ const ssoConfigurationPage = {
       .filter((e) => e);
     return out;
   },
-  loadProvider: (page, provider_name) => {
-    ApiClient.getPluginConfiguration(ssoConfigurationPage.pluginUniqueId).then(
-      (config) => {
-        var provider = config.OidConfigs[provider_name] || {};
-
-        const form_elements = ssoConfigurationPage.listArgumentsByType(page);
-
-        page.querySelector("#OidProviderName").value = provider_name;
-
-        form_elements.text_fields.forEach((id) => {
-          if (provider[id]) page.querySelector("#" + id).value = provider[id];
-        });
-
-        form_elements.json_fields.forEach((id) => {
-          if (provider[id])
-            page.querySelector("#" + id).value = JSON.stringify(provider[id]);
-        });
-
-        form_elements.text_list_fields.forEach((id) => {
-          if (provider[id])
-            ssoConfigurationPage.fillTextList(
-              provider[id],
-              page.querySelector("#" + id),
-            );
-        });
-
-        form_elements.folder_list_fields.forEach((id) => {
-          if (provider[id]) {
-            ssoConfigurationPage.populateEnabledFolders(
-              provider[id],
-              page.querySelector(`#${id}`),
-            );
-          }
-        });
-
-        form_elements.check_fields.forEach((id) => {
-          if (provider[id]) page.querySelector("#" + id).checked = provider[id];
-        });
-
-        form_elements.role_map_fields.forEach((id) => {
-          const elem = page.querySelector(`#${id}`);
-          if (provider[id])
-            ssoConfigurationPage.populateRoleMappings(provider[id], elem);
-        });
-      },
-    );
+  setProviderFeedback: (page, message, isError = false) => {
+    const status = page.querySelector("#sso-provider-feedback");
+    status.textContent = message;
+    status.classList.toggle("sso-feedback-error", isError);
   },
-  deleteProvider: (page, provider_name) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to delete the provider ${provider_name}?`,
-      )
-    ) {
+  resetProviderForm: (page) => {
+    const formElements = ssoConfigurationPage.listArgumentsByType(page);
+    const form = page.querySelector("#sso-new-oidc-provider");
+    page.querySelector("#OidProviderName").value = "";
+    formElements.text_fields.forEach((id) => {
+      page.querySelector("#" + id).value = "";
+    });
+    formElements.json_fields.forEach((id) => {
+      page.querySelector("#" + id).value = "";
+    });
+    formElements.text_list_fields.forEach((id) => {
+      page.querySelector("#" + id).value = "";
+    });
+    formElements.check_fields.forEach((id) => {
+      page.querySelector("#" + id).checked = false;
+    });
+    formElements.folder_list_fields.forEach((id) => {
+      form.querySelectorAll("#" + id + " .folder-checkbox").forEach((e) => {
+        e.checked = false;
+      });
+    });
+    formElements.role_map_fields.forEach((id) => {
+      page.querySelector("#" + id).replaceChildren();
+    });
+    page.dataset.ssoLoadedProvider = "";
+    ssoConfigurationPage.setSecretVisible(page, false);
+    ssoConfigurationPage.setProviderFeedback(page, "");
+  },
+  setSecretVisible: (page, visible) => {
+    page.querySelector("#OidSecret").type = visible ? "text" : "password";
+    const control = page.querySelector("#ToggleSecret");
+    control.setAttribute("aria-pressed", String(visible));
+    control.textContent = visible ? "Hide secret" : "Show secret";
+  },
+  loadProvider: async (page, providerName) => {
+    if (!providerName) {
+      ssoConfigurationPage.setProviderFeedback(
+        page, "Choose a provider before loading it.", true,
+      );
       return;
     }
-    return new Promise((resolve) => {
-      ApiClient.getPluginConfiguration(
+
+    try {
+      const config = await ApiClient.getPluginConfiguration(
         ssoConfigurationPage.pluginUniqueId,
-      ).then((config) => {
-        if (!config.OidConfigs.hasOwnProperty(provider_name)) {
-          resolve();
-          return;
-        }
+      );
+      const provider = config.OidConfigs?.[providerName];
+      if (!provider) {
+        throw new Error("The selected provider no longer exists.");
+      }
 
-        delete config.OidConfigs[provider_name];
-        ApiClient.updatePluginConfiguration(
-          ssoConfigurationPage.pluginUniqueId,
-          config,
-        ).then(function (result) {
-          Dashboard.processPluginConfigurationUpdateResult(result);
-          ssoConfigurationPage.loadConfiguration(page);
+      // Reset every field: unchecked booleans and empty text must not retain
+      // values from the previously loaded provider.
+      ssoConfigurationPage.resetProviderForm(page);
+      await ssoConfigurationPage.populateFolders(
+        page.querySelector("#EnabledFolders"),
+      );
+      const fields = ssoConfigurationPage.listArgumentsByType(page);
+      page.querySelector("#OidProviderName").value = providerName;
 
-          Dashboard.alert("Provider removed");
-
-          resolve();
-        });
+      fields.text_fields.forEach((id) => {
+        page.querySelector("#" + id).value = provider[id] ?? "";
       });
-    });
+      fields.json_fields.forEach((id) => {
+        page.querySelector("#" + id).value =
+          provider[id] == null ? "" : JSON.stringify(provider[id]);
+      });
+      fields.text_list_fields.forEach((id) => {
+        ssoConfigurationPage.fillTextList(
+          Array.isArray(provider[id]) ? provider[id] : [],
+          page.querySelector("#" + id),
+        );
+      });
+      fields.folder_list_fields.forEach((id) => {
+        ssoConfigurationPage.populateEnabledFolders(
+          provider[id],
+          page.querySelector("#" + id),
+        );
+      });
+      fields.check_fields.forEach((id) => {
+        page.querySelector("#" + id).checked = provider[id] === true;
+      });
+      await Promise.all(fields.role_map_fields.map((id) =>
+        ssoConfigurationPage.populateRoleMappings(
+          Array.isArray(provider[id]) ? provider[id] : [],
+          page.querySelector("#" + id),
+        ),
+      ));
+
+      page.dataset.ssoLoadedProvider = providerName;
+      ssoConfigurationPage.setProviderFeedback(
+        page, 'Loaded provider "' + providerName + '".',
+      );
+    } catch (error) {
+      ssoConfigurationPage.setProviderFeedback(
+        page, 'Unable to load provider: ' + (error?.message || error), true,
+      );
+    }
   },
-  saveProvider: (page, provider_name) => {
-    return new Promise((resolve) => {
-      const form_elements = ssoConfigurationPage.listArgumentsByType(page);
+  deleteProvider: async (page, providerName) => {
+    if (!providerName) {
+      ssoConfigurationPage.setProviderFeedback(page, "Select a provider first.", true);
+      return;
+    }
 
-      ApiClient.getPluginConfiguration(
+    // Removal also deletes its saved OIDC subject links; require typing the
+    // exact name instead of a yes/no click.
+    const confirmation = window.prompt(
+      'Deleting "' + providerName +
+      '" also deletes its identity mappings. Type the provider name to confirm:',
+    );
+    if (confirmation !== providerName) {
+      return;
+    }
+
+    try {
+      const config = await ApiClient.getPluginConfiguration(
         ssoConfigurationPage.pluginUniqueId,
-      ).then((config) => {
-        var current_config = {};
-        if (config.OidConfigs.hasOwnProperty(provider_name)) {
-          current_config = config.OidConfigs[provider_name];
-        }
+      );
+      if (!Object.hasOwn(config.OidConfigs || {}, providerName)) {
+        throw new Error("Provider no longer exists.");
+      }
 
-        form_elements.text_fields.forEach((id) => {
-          const value = page.querySelector("#" + id).value;
-          if (value) {
-            current_config[id] = page.querySelector("#" + id).value;
-          } else {
-            current_config[id] = null;
-          }
-        });
+      delete config.OidConfigs[providerName];
+      const result = await ApiClient.updatePluginConfiguration(
+        ssoConfigurationPage.pluginUniqueId, config,
+      );
+      Dashboard.processPluginConfigurationUpdateResult(result);
+      ssoConfigurationPage.resetProviderForm(page);
+      await ssoConfigurationPage.loadConfiguration(page);
+      ssoConfigurationPage.setProviderFeedback(page, "Provider removed.");
+    } catch (error) {
+      ssoConfigurationPage.setProviderFeedback(
+        page, 'Deletion failed: ' + (error?.message || error), true,
+      );
+    }
+  },
+  validateProvider: (page, providerName, existing) => {
+    const issuer = page.querySelector("#OidEndpoint").value.trim();
+    const clientId = page.querySelector("#OidClientId").value.trim();
+    if (!providerName || !clientId) {
+      throw new Error("Provider identifier and client ID are required.");
+    }
 
-        form_elements.json_fields.forEach((id) => {
-          const value = page.querySelector("#" + id).value;
-          if (value) {
-            current_config[id] = JSON.parse(value);
-          } else {
-            current_config[id] = null;
-          }
-        });
+    let url;
+    try {
+      url = new URL(issuer);
+    } catch (_) {
+      throw new Error("OIDC issuer must be a valid HTTPS URL.");
+    }
+    if (
+      url.protocol !== "https:" ||
+      !url.hostname ||
+      url.username || url.password ||
+      url.search || url.hash
+    ) {
+      throw new Error("OIDC issuer must be an HTTPS URL with no credentials, query or fragment.");
+    }
+    if (!existing && !page.querySelector("#OidSecret").value) {
+      throw new Error("A client secret is required for a new provider.");
+    }
+    const override = page.querySelector("#PortOverride").value.trim();
+    if (override && (!/^[0-9]+$/.test(override) ||
+      Number(override) < 1 || Number(override) > 65535)) {
+      throw new Error("Port override must be a number between 1 and 65535.");
+    }
+    if (page.dataset.ssoLoadedProvider &&
+        page.dataset.ssoLoadedProvider !== providerName) {
+      throw new Error("Provider identifier changed. Use New provider or reload the original provider.");
+    }
+    return { issuer, portOverride: override ? Number(override) : null };
+  },
+  saveProvider: async (page, providerName) => {
+    const saveButton = page.querySelector("#SaveProvider");
+    if (saveButton.disabled) return;
 
-        form_elements.check_fields.forEach((id) => {
-          current_config[id] = page.querySelector("#" + id).checked;
-        });
+    saveButton.disabled = true;
+    try {
+      const name = providerName.trim();
+      const formElements = ssoConfigurationPage.listArgumentsByType(page);
+      const config = await ApiClient.getPluginConfiguration(
+        ssoConfigurationPage.pluginUniqueId,
+      );
+      config.OidConfigs ||= {};
+      const existing = Object.hasOwn(config.OidConfigs, name)
+        ? config.OidConfigs[name]
+        : null;
 
-        form_elements.text_list_fields.forEach((id) => {
-          current_config[id] = ssoConfigurationPage.parseTextList(
-            page.querySelector("#" + id),
-          );
-        });
+      if (existing && page.dataset.ssoLoadedProvider !== name) {
+        throw new Error("Load the existing provider before editing it.");
+      }
 
-        form_elements.folder_list_fields.forEach((id) => {
-          const elem = page.querySelector(`#${id}`);
-          current_config[id] =
-            ssoConfigurationPage.serializeEnabledFolders(elem);
-        });
-
-        form_elements.role_map_fields.forEach((id) => {
-          const elem = page.querySelector(`#${id}`);
-          current_config[id] = ssoConfigurationPage.serializeRoleMappings(elem);
-        });
-
-        config.OidConfigs[provider_name] = current_config;
-
-        ApiClient.updatePluginConfiguration(
-          ssoConfigurationPage.pluginUniqueId,
-          config,
-        ).then(function (result) {
-          Dashboard.processPluginConfigurationUpdateResult(result);
-          ssoConfigurationPage.loadConfiguration(page);
-          ssoConfigurationPage.loadProvider(page, provider_name);
-
-          page.querySelector("#selectProvider").value = provider_name;
-          Dashboard.alert("Settings saved.");
-          resolve();
-        });
+      const { issuer, portOverride } =
+        ssoConfigurationPage.validateProvider(page, name, existing);
+      const next = { ...(existing || {}) };
+      formElements.text_fields.forEach((id) => {
+        next[id] = page.querySelector("#" + id).value || null;
       });
-    });
+      formElements.json_fields.forEach((id) => {
+        const text = page.querySelector("#" + id).value.trim();
+        next[id] = text ? JSON.parse(text) : null;
+      });
+      formElements.check_fields.forEach((id) => {
+        next[id] = page.querySelector("#" + id).checked;
+      });
+      formElements.text_list_fields.forEach((id) => {
+        next[id] = ssoConfigurationPage.parseTextList(page.querySelector("#" + id));
+      });
+      formElements.folder_list_fields.forEach((id) => {
+        next[id] = ssoConfigurationPage.serializeEnabledFolders(
+          page.querySelector("#" + id),
+        );
+      });
+      formElements.role_map_fields.forEach((id) => {
+        next[id] = ssoConfigurationPage.serializeRoleMappings(page.querySelector("#" + id));
+      });
+
+      // Leave the identity dictionaries in the fetched provider object intact.
+      next.OidEndpoint = issuer;
+      next.PortOverride = portOverride;
+      if (!page.querySelector("#OidSecret").value && existing) {
+        next.OidSecret = existing.OidSecret;
+      }
+      config.OidConfigs[name] = next;
+
+      const result = await ApiClient.updatePluginConfiguration(
+        ssoConfigurationPage.pluginUniqueId, config,
+      );
+      Dashboard.processPluginConfigurationUpdateResult(result);
+      await ssoConfigurationPage.loadConfiguration(page);
+      await ssoConfigurationPage.loadProvider(page, name);
+      page.querySelector("#selectProvider").value = name;
+      ssoConfigurationPage.setProviderFeedback(page, "Provider settings saved. Re-test SSO login.");
+    } catch (error) {
+      ssoConfigurationPage.setProviderFeedback(
+        page, "Save failed: " + (error?.message || error), true,
+      );
+    } finally {
+      saveButton.disabled = false;
+    }
   },
   populateLinkProviders: (page, providers) => {
     const select = page.querySelector("#sso-link-provider");
@@ -585,6 +683,8 @@ const ssoConfigurationPage = {
   },
 };
 
+export { ssoConfigurationPage };
+
 export default function (view) {
   ssoConfigurationPage.addTextAreaStyle(view);
   ssoConfigurationPage.loadConfiguration(view);
@@ -598,6 +698,18 @@ export default function (view) {
 
     e.preventDefault();
     return false;
+  });
+
+  view.querySelector("#NewProvider").addEventListener("click", () => {
+    ssoConfigurationPage.resetProviderForm(view);
+    view.querySelector("#OidProviderName").focus();
+  });
+
+  view.querySelector("#ToggleSecret").addEventListener("click", () => {
+    ssoConfigurationPage.setSecretVisible(
+      view,
+      view.querySelector("#OidSecret").type === "password",
+    );
   });
 
   view.querySelector("#LoadProvider").addEventListener("click", (e) => {

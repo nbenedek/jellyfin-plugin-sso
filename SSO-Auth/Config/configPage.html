@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <title>SSO</title>
+    <title>SSO Authentication</title>
   </head>
   <body>
     <div
@@ -13,7 +13,7 @@
       <div data-role="content">
         <div class="content-primary">
           <div class="sectionTitleContainer flex align-items-center">
-            <h2 class="sectionTitle">SSO Settings:</h2>
+            <h2 class="sectionTitle">SSO Authentication</h2>
             <a
               is="emby-button"
               class="raised button-alt headerHelpButton"
@@ -22,44 +22,26 @@
               >${Help}</a
             >
           </div>
-          <p>
-            <i>Note:</i>
-            Making changes to this configuration requires a restart of Jellyfin.
-            <br />
-            This fork is being refactored around OpenID Connect only.
-            <br />
-            See the
-            <a
-              is="emby-linkbutton"
-              href="https://github.com/9p4/jellyfin-plugin-sso"
-              class="button-link"
-              >help page</a
-            >
-            and
-            <a
-              is="emby-linkbutton"
-              href="https://github.com/9p4/jellyfin-plugin-sso/projects/1"
-              class="button-link"
-              >roadmap
-            </a>
-            for more information.
-            <br />
-            OIDC account linking is restricted to administrators. Use the
-            management section below to associate an OIDC identity with an
-            existing Jellyfin account.
+          <p class="fieldDescription sso-overview">
+            Configure OpenID Connect sign-in providers. Changes to existing
+            account links are administrator-controlled; usernames alone never
+            establish account ownership. A Jellyfin restart may be needed
+            after changing a provider.
           </p>
-
+          <p class="fieldDescription">
+            Native Jellyfin administrator login remains available for recovery.
+            Provider setup and account linking are separate operations.
+          </p>
           <form id="sso-load-config" class="esqConfigurationForm">
             <div
               class="verticalSection"
               is="emby-collapse"
-              title="Select Existing Provider to Modify"
+              title="Existing sign-in providers"
             >
               <div class="collapseContent">
                 <div class="selectContainer">
                   <label class="selectLabel" for="selectProvider"
-                    >Name of OpenID Provider:
-                  </label>
+                    >Provider:</label>
                   <select
                     is="emby-select"
                     id="selectProvider"
@@ -75,6 +57,14 @@
                   </div>
                 </div>
 
+                <button
+                  id="NewProvider"
+                  is="emby-button"
+                  type="button"
+                  class="raised button-alt block emby-button"
+                >
+                  <span>Configure a new provider</span>
+                </button>
                 <button
                   id="LoadProvider"
                   is="emby-button"
@@ -100,7 +90,7 @@
             <div
               is="emby-collapse"
               data-expanded="true"
-              title="Add / Update Provider Configuration"
+              title="Provider configuration"
               class="verticalSection verticalSection-extrabottompadding"
             >
               <div class="collapseContent">
@@ -108,7 +98,7 @@
                   <label
                     class="inputLabel inputLabelUnfocused"
                     for="OidProviderName"
-                    >Name of OpenID Provider:</label
+                    >Provider identifier:</label
                   >
                   <input
                     is="emby-input"
@@ -118,20 +108,16 @@
                     class="sso-text"
                   />
                   <div class="fieldDescription">
-                    The name used by Jellyfin to identify the OpenID provider.
-                    <br />
-                    If an OpenID provider with a matching name does not exist, a
-                    new provider with this name will be created.
-                    <br />
-                    If an OpenID provider with a matching name already exists,
-                    the settings for that provider will be updated.
+                    Used in Jellyfin login URLs. To edit an existing provider,
+                    select it above and choose Load Provider; use Configure a
+                    new provider to start with an empty form.
                   </div>
                 </div>
                 <div class="inputContainer">
                   <label
                     class="inputLabel inputLabelUnfocused"
                     for="OidEndpoint"
-                    >OpenID Endpoint:</label
+                    >OIDC issuer / authority (HTTPS):</label
                   >
                   <input
                     is="emby-input"
@@ -141,7 +127,7 @@
                     class="sso-text"
                   />
                   <div class="fieldDescription">
-                    The OpenID endpoint. Must have a .well-known path available.
+                    Enter the HTTPS issuer URL (not the .well-known JSON URL). It must support OIDC discovery.
                   </div>
                 </div>
 
@@ -171,12 +157,21 @@
                   <input
                     is="emby-input"
                     id="OidSecret"
-                    required=""
-                    type="text"
+                    type="password"
+                    autocomplete="off"
                     class="sso-text"
                   />
+                  <button
+                    id="ToggleSecret"
+                    is="emby-button"
+                    type="button"
+                    class="raised emby-button sso-secret-toggle"
+                    aria-controls="OidSecret"
+                    aria-pressed="false"
+                  >Show secret</button>
                   <div class="fieldDescription">
-                    The OpenID client secret. Randomly generated & shared.
+                    Stored client secret. Leave unchanged to preserve it; new providers require a secret.
+                    Avoid screenshots of this field.
                   </div>
                 </div>
 
@@ -343,6 +338,9 @@
                   </div>
                 </div>
 
+                <details class="sso-advanced-options">
+                  <summary>Advanced settings: Live TV, claims, scopes and compatibility</summary>
+                  <p class="fieldDescription">Only change these options if your identity provider requires them. Existing values are preserved when loading a provider.</p>
                 <div
                   class="checkboxContainer checkboxContainer-withDescription"
                 >
@@ -625,7 +623,7 @@
                 </div>
 
                 <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="RoleClaim"
+                  <label class="inputLabel inputLabelUnfocused" for="SchemeOverride"
                     >Scheme Override</label
                   >
                   <input
@@ -641,7 +639,7 @@
                 </div>
 
                 <div class="inputContainer">
-                  <label class="inputLabel inputLabelUnfocused" for="RoleClaim"
+                  <label class="inputLabel inputLabelUnfocused" for="PortOverride"
                     >Port Override</label
                   >
                   <input
@@ -656,6 +654,8 @@
                   </div>
                 </div>
 
+                </details>
+                <p id="sso-provider-feedback" class="sso-provider-feedback" role="status" aria-live="polite"></p>
                 <button
                   id="SaveProvider"
                   is="emby-button"
@@ -669,7 +669,8 @@
           </form>
 
           <section class="verticalSection verticalSection-extrabottompadding">
-            <h2 class="sectionTitle">Administrator-only OIDC identity links</h2>
+            <details class="sso-identity-management">
+              <summary>Administrator-only OIDC identity links</summary>
             <p class="fieldDescription">
               To migrate an existing account, enter its Jellyfin user ID, the
               exact OIDC issuer, and the identity provider's immutable subject
@@ -748,6 +749,7 @@
             </button>
             <p id="sso-admin-link-status" role="status" aria-live="polite"></p>
             <div id="sso-admin-link-results"></div>
+            </details>
           </section>
         </div>
       </div>

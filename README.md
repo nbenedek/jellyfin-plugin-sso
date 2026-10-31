@@ -54,6 +54,22 @@ to know the identity provider user's password or trigger a public linking callba
 Keep the issuer and subject exact: a mismatched value will not match the validated
 OIDC identity during login. Existing links remain intact across upgrades.
 
+### Administrator navigation (Stage 6)
+
+On Jellyfin Web 10.11.x, the SSO Authentication settings page is advertised in
+the **Dashboard → Plugins sidebar** using Jellyfin's native
+`EnableInMainMenu` plugin-page metadata. The existing Dashboard → Plugins →
+SSO-Auth Settings route remains available. No web-client JavaScript injector or
+server-wide index.html modification is necessary.
+
+The provider editor now separates essential OIDC configuration from expandable
+advanced options, masks the client secret, checks the issuer URL, and explicitly
+resets the form between provider switches. Existing issuer/subject identity
+links are preserved during configuration saves. The live `development Jellyfin instance` UI
+acceptance test is still pending; see [Stage 6 verification](docs/STAGE6-UI.md).
+External-login button visual styling is documented separately and is not
+automatically injected into all clients.
+
 ### Keycloak-only legacy SSO migration (standalone CLI)
 
 Legacy accounts created by the archived plugin may have only username-based

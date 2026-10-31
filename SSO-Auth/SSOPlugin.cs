@@ -50,6 +50,8 @@ public class SSOPlugin : BasePlugin<PluginConfiguration>, IPlugin, IHasWebPages
             new PluginPageInfo
             {
                 Name = Name,
+                DisplayName = "SSO Authentication",
+                EnableInMainMenu = true,
                 EmbeddedResourcePath = $"{GetType().Namespace}.Config.configPage.html"
             },
             new PluginPageInfo

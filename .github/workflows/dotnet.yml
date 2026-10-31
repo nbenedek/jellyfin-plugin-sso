@@ -29,6 +29,8 @@ jobs:
       run: dotnet test --configuration Release --no-build --verbosity normal
     - name: Test offline migration CLI
       run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+    - name: Test Stage 6 administrator UI
+      run: node --test tests/stage6-ui.test.mjs
     - name: Verify Keycloak-specific CLI help
       run: |
         dotnet SSO-Auth.Migration/bin/Release/net9.0/Jellyfin.SSO.KeycloakMigration.dll --help | grep -F 'Keycloak-only legacy account migration'
