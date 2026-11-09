@@ -1,11 +1,11 @@
 name: "SSO Authentication"
 guid: "505ce9d1-d916-42fa-86ca-673ef241d7df"
-imageUrl: "https://raw.githubusercontent.com/nbenedek/jellyfin-plugin-sso/dev/oidc-security-refactor/img/logo.png"
-version: "4.1.0.0"
-targetAbi: "10.11.0.0"
-framework: "net9.0"
+imageUrl: "https://raw.githubusercontent.com/nbenedek/jellyfin-plugin-sso/dev/jellyfin-12-compat/img/logo.png"
+version: "4.2.0.0"
+targetAbi: "12.0.0.0"
+framework: "net10.0"
 owner: "nbenedek"
-overview: "OIDC-only authentication for Jellyfin 10.11 with secure identity linking."
+overview: "OIDC-only authentication for Jellyfin 12 with secure identity linking."
 description: |
   Sign in using an OpenID Connect provider. Includes verified issuer/subject identity links, administrator-controlled linking, and a secure sign-in flow.
   Review documentation at https://github.com/nbenedek/jellyfin-plugin-sso
@@ -15,15 +15,15 @@ artifacts:
   - "Duende.IdentityModel.OidcClient.dll"
   - "Duende.IdentityModel.dll"
 changelog: |
-  4.1.0.0 — OIDC-only security and usability release
+  4.2.0.0 — OIDC-only security and usability release
   - Removed SAML and obsolete public linking paths; only OpenID Connect is supported.
   - Added expiring, one-time, provider-bound login transactions and replay-resistant token exchange.
   - Matched identities by validated issuer and subject; linking/unlinking is administrator-only.
   - Hardened API authorization, provider management, malformed claims handling, and anonymous access controls.
   - Preserved existing identity links during provider settings changes and Jellyfin restarts.
-  - Modernized the administrator interface and Jellyfin 10.11 navigation.
+  - Modernized the administrator interface and Jellyfin 12 navigation.
   - Refactored OIDC claims/configuration code and added automated security and regression tests.
   - Added versioned release ZIP, complete plugin metadata, and package verification.
   - Retired unsafe Python migration tooling; retained the reviewed standalone .NET 9 Keycloak migration CLI.
-  - Requires Jellyfin 10.11.x; maintain a backup of plugin files and SSO-Auth.xml when upgrading.
-  Full release notes: https://github.com/nbenedek/jellyfin-plugin-sso/blob/dev/oidc-security-refactor/CHANGELOG.md
+  - Requires Jellyfin 12.x; maintain a backup of plugin files and SSO-Auth.xml when upgrading.
+  Full release notes: https://github.com/nbenedek/jellyfin-plugin-sso/blob/dev/jellyfin-12-compat/CHANGELOG.md
