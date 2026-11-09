@@ -8,7 +8,7 @@ import sys
 import zipfile
 
 GUID = "505ce9d1-d916-42fa-86ca-673ef241d7df"
-TARGET_ABI = "10.11.0.0"
+TARGET_ABI = "12.0.0.0"
 REQUIRED_DLLS = {
     "SSO-Auth.dll",
     "Duende.IdentityModel.dll",
