@@ -1,0 +1,108 @@
+name: Publish SSO 4.2.0.0 for Jellyfin 12
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-jellyfin12.yml
+
+permissions:
+  actions: read
+  contents: write
+
+concurrency:
+  group: sso-v4.2.0.0-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'nbenedek/jellyfin-plugin-sso' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out merged and accepted sources
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Verify merged source matches accepted compatibility candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin 307c7585d311083a3dd7fa9da6d84038e7c3d3e2
+          git merge-base --is-ancestor 307c7585d311083a3dd7fa9da6d84038e7c3d3e2 HEAD
+          git diff --exit-code 307c7585d311083a3dd7fa9da6d84038e7c3d3e2 HEAD -- SSO-Auth/ SSO-Auth.Tests/ SSO-Auth.Migration/ build.yaml tools/verify_release_package.py tests/test_release_package.py
+      - name: Download passed, validated compatibility candidate artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p _release
+          gh run download 42690588805 --repo nbenedek/jellyfin-plugin-sso --name sso-auth-jellyfin-12-4.2.0.0-rc --dir _release
+      - name: Verify original CI artifact and metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd _release
+          test -s sso-authentication_4.2.0.0.zip
+          test -s SHA256SUMS
+          sha256sum --check SHA256SUMS
+          cd ..
+          python3 tools/verify_release_package.py _release/sso-authentication_4.2.0.0.zip 4.2.0.0
+          python3 - <<'PY'
+          import hashlib, pathlib, zipfile, json
+          path=pathlib.Path('_release/sso-authentication_4.2.0.0.zip')
+          with zipfile.ZipFile(path) as z:
+              m=json.loads(z.read('meta.json'))
+          assert m['targetAbi']=='12.0.0.0'
+          assert m['version']=='4.2.0.0'
+          assert m['guid']=='505ce9d1-d916-42fa-86ca-673ef241d7df'
+          print('Validated CI artifact SHA256:',hashlib.sha256(path.read_bytes()).hexdigest())
+          PY
+      - name: Prepare release notes
+        shell: bash
+        run: |
+          cat > _release/RELEASE-NOTES.md <<'EOF'
+          # SSO Authentication 4.2.0.0 — Jellyfin 12 compatibility
+
+          Stable plugin build targeting Jellyfin 12.x and .NET 10.
+
+          - Migrates the 4.1 plugin build to Jellyfin 12.4 / .NET 10.
+          - Preserves the existing OIDC authentication, administrator-only identity linking, and permission behavior.
+          - No application C# authentication or authorization logic changed in this compatibility release.
+          - Passed .NET, package validation, and administrator UI tests in CI and development.
+          - Installed and accepted on jellyfin-dev with Jellyfin 12.4, including real Keycloak sign-in and permissions.
+
+          **Compatibility:** Jellyfin 12.x. For Jellyfin 10.11.x, continue using SSO 4.1.0.0.
+
+          **Upgrade:** Back up the entire existing plugin version directory and `plugins/configurations/SSO-Auth.xml`. Stop Jellyfin, install all four files from the ZIP into the new versioned plugin directory, remove the old version from active plugin folders, then restart. Do not overwrite the XML or run both versions simultaneously. Production Jellyfin upgrade is separate.
+
+          CI source: `307c7585d311083a3dd7fa9da6d84038e7c3d3e2` (merged via PR #2).
+          EOF
+      - name: Publish verified stable GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v4.2.0.0 >/dev/null 2>&1; then
+            echo 'Release v4.2.0.0 already exists; refusing to replace its assets.'
+            exit 1
+          fi
+          gh release create v4.2.0.0 \
+            _release/sso-authentication_4.2.0.0.zip \
+            _release/SHA256SUMS \
+            --target "${GITHUB_SHA}" \
+            --title 'SSO Authentication 4.2.0.0 — Jellyfin 12' \
+            --notes-file _release/RELEASE-NOTES.md \
+            --latest
+      - name: Verify published asset against exact CI package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view v4.2.0.0 --json assets --jq '.assets[].name' | grep -Fx sso-authentication_4.2.0.0.zip
+          curl -fL --retry 4 --retry-delay 2 \
+            'https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.2.0.0/sso-authentication_4.2.0.0.zip' \
+            -o "${RUNNER_TEMP}/downloaded.zip"
+          cmp "${RUNNER_TEMP}/downloaded.zip" _release/sso-authentication_4.2.0.0.zip
+          sha256sum "${RUNNER_TEMP}/downloaded.zip"
