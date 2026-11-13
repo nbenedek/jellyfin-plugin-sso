@@ -9,7 +9,10 @@ permissions:
   contents: write
 
 jobs:
+  # Legacy publisher is retained only for its original Jellyfin 10.11 / .NET 9 release.
+  # Jellyfin 12.x releases are handled by their dedicated verified release workflow.
   build:
+    if: github.event.release.tag_name == 'v4.1.0.0'
     uses: ./.github/workflows/build.yml
     with:
       dotnet-version: "9.0.*"
