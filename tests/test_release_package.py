@@ -18,15 +18,15 @@ class ReleasePackageTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.archive = Path(self.temp.name) / "sso-authentication_4.1.0.0.zip"
+        self.archive = Path(self.temp.name) / "sso-authentication_4.2.0.0.zip"
         self.meta = {
-            "version": "4.1.0.0",
+            "version": "4.2.0.0",
             "guid": verify.GUID,
             "targetAbi": verify.TARGET_ABI,
             "name": "SSO Authentication",
             "owner": "nbenedek",
             "description": "OpenID Connect sign-in. Documentation at https://github.com/nbenedek/jellyfin-plugin-sso",
-            "changelog": "4.1.0.0 — OIDC security release\n- One-time transactions\n- Issuer/subject links\n- Admin only linking\n- UI update",
+            "changelog": "4.2.0.0 — OIDC security release\n- One-time transactions\n- Issuer/subject links\n- Admin only linking\n- UI update",
         }
 
     def build(self, *, omit=None, extra=None, metadata=None):
@@ -44,51 +44,51 @@ class ReleasePackageTests(unittest.TestCase):
 
     def test_valid_package(self):
         self.build()
-        self.assertEqual("4.1.0.0", verify.verify_package(
-            self.archive, "4.1.0.0"
+        self.assertEqual("4.2.0.0", verify.verify_package(
+            self.archive, "4.2.0.0"
         )["version"])
 
     def test_rejects_missing_metadata(self):
         self.build(omit="meta.json")
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_unexpected_artifacts(self):
         self.build(extra="unwanted.dll")
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_wrong_version(self):
         self.build(metadata={**self.meta, "version": "4.0.0.4"})
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_wrong_plugin_guid(self):
         self.build(metadata={**self.meta, "guid": "wrong-guid"})
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_missing_assembly(self):
         self.build(omit="Duende.IdentityModel.dll")
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_missing_changelog(self):
         self.build(metadata={**self.meta, "changelog": ""})
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_old_description(self):
         self.build(metadata={**self.meta, "description": "See https://github.com/9p4/jellyfin-plugin-sso"})
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
     def test_rejects_duplicate_entries(self):
         self.build()
         with zipfile.ZipFile(self.archive, "a") as z:
             z.writestr("meta.json", json.dumps(self.meta))
         with self.assertRaises(ValueError):
-            verify.verify_package(self.archive, "4.1.0.0")
+            verify.verify_package(self.archive, "4.2.0.0")
 
 
 if __name__ == "__main__":
