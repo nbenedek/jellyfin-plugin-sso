@@ -8,6 +8,14 @@
     "owner": "nbenedek",
     "versions": [
       {
+        "changelog": "# SSO Authentication 4.2.0.1 — Client IP fix\n\nPatch release for Jellyfin 12.x and .NET 10.\n\n- Fix missing IP addresses in successful OIDC authentication and online-session activity.\n- Use the effective remote address processed by Jellyfin / ASP.NET Core, rather than trusting raw X-Forwarded-For request headers.\n- Preserve existing issuer/subject identity links, Keycloak integration, and library permissions.\n\nThe fix was accepted on jellyfin-dev before release preparation.\nVerify that Jellyfin's known proxies are configured correctly to record the real public client IP.\n\n**Upgrade:** Back up the full installed plugin directory and `plugins/configurations/SSO-Auth.xml`, stop Jellyfin, install the entire ZIP into a single versioned SSO plugin directory, and restart. Never install two active plugin versions. No database or account migration is needed.\n\n**Compatibility:** Jellyfin 12.x / .NET 10 only. Jellyfin 10.11.x remains on 4.1.0.0.\n",
+        "checksum": "0c59701dabfe98ada04c7aca62cbe419",
+        "sourceUrl": "https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.2.0.1/sso-authentication_4.2.0.1.zip",
+        "targetAbi": "12.0.0.0",
+        "timestamp": "2026-11-20T12:40:28.565954Z",
+        "version": "4.2.0.1"
+      },
+      {
         "changelog": "# SSO Authentication 4.2.0.0 — Jellyfin 12 compatibility\n\nStable plugin build targeting Jellyfin 12.x and .NET 10.\n\n- Migrates the 4.1 plugin build to Jellyfin 12.4 / .NET 10.\n- Preserves the existing OIDC authentication, administrator-only identity linking, and permission behavior.\n- No application C# authentication or authorization logic changed in this compatibility release.\n- Passed .NET, package validation, and administrator UI tests in CI and development.\n- Installed and accepted on jellyfin-dev with Jellyfin 12.4, including real Keycloak sign-in and permissions.\n\n**Compatibility:** Jellyfin 12.x. For Jellyfin 10.11.x, continue using SSO 4.1.0.0.\n\n**Upgrade:** Back up the entire existing plugin version directory and `plugins/configurations/SSO-Auth.xml`. Stop Jellyfin, install all four files from the ZIP into the new versioned plugin directory, remove the old version from active plugin folders, then restart. Do not overwrite the XML or run both versions simultaneously. Production Jellyfin upgrade is separate.\n\nCI source: `307c7585d311083a3dd7fa9da6d84038e7c3d3e2` (merged via PR #2).\n\n",
         "checksum": "7e06d4f1fa2379f5f5cee8899d073581",
         "sourceUrl": "https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.2.0.0/sso-authentication_4.2.0.0.zip",
