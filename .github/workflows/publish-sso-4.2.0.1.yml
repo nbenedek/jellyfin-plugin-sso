@@ -1,0 +1,147 @@
+name: Publish SSO 4.2.0.1 for Jellyfin 12
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/publish-sso-4.2.0.1.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sso-4.2.0.1-publish
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: github.repository == 'nbenedek/jellyfin-plugin-sso'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout merged source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+
+      - name: Assert exact release version and IP fix
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Fq '<AssemblyVersion>4.2.0.1</AssemblyVersion>' SSO-Auth/SSO-Auth.csproj
+          grep -Fq 'version: "4.2.0.1"' build.yaml
+          grep -Fq 'authRequest.RemoteEndPoint = HttpContext.Connection.RemoteIpAddress?.ToString();' SSO-Auth/Api/SSOController.cs
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4.3.1
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore build and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet restore
+          dotnet build -c Release --no-restore --warnaserror
+          dotnet test -c Release --no-build --verbosity normal
+          python3 -m unittest discover -s tests -p 'test_release_package.py' -v
+          node --test tests/stage6-ui.test.mjs
+          bash -n tools/stage8-smoke.sh
+
+      - name: Package Jellyfin 12 plugin
+        id: jprm
+        uses: oddstr13/jellyfin-plugin-repository-manager@9497a0a499416cc572ed2e07a391d9f943a37b4d # v1.1.1
+        with:
+          dotnet-target: net10.0
+
+      - name: Verify package and checksum
+        env:
+          PACKAGE: ${{ steps.jprm.outputs.artifact }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s "$PACKAGE"
+          mkdir -p _release
+          cp "$PACKAGE" _release/sso-authentication_4.2.0.1.zip
+          python3 tools/verify_release_package.py _release/sso-authentication_4.2.0.1.zip 4.2.0.1
+          (cd _release && sha256sum sso-authentication_4.2.0.1.zip > SHA256SUMS && sha256sum -c SHA256SUMS)
+          cat > _release/RELEASE-NOTES.md <<'EOF'
+          # SSO Authentication 4.2.0.1 — Client IP fix
+
+          Patch release for Jellyfin 12.x and .NET 10.
+
+          - Fix missing IP addresses in successful OIDC authentication and online-session activity.
+          - Use the effective remote address processed by Jellyfin / ASP.NET Core, rather than trusting raw X-Forwarded-For request headers.
+          - Preserve existing issuer/subject identity links, Keycloak integration, and library permissions.
+
+          The fix was accepted on jellyfin-dev before release preparation.
+          Verify that Jellyfin's known proxies are configured correctly to record the real public client IP.
+
+          **Upgrade:** Back up the full installed plugin directory and `plugins/configurations/SSO-Auth.xml`, stop Jellyfin, install the entire ZIP into a single versioned SSO plugin directory, and restart. Never install two active plugin versions. No database or account migration is needed.
+
+          **Compatibility:** Jellyfin 12.x / .NET 10 only. Jellyfin 10.11.x remains on 4.1.0.0.
+          EOF
+
+      - name: Publish immutable versioned release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view v4.2.0.1 --repo nbenedek/jellyfin-plugin-sso >/dev/null 2>&1; then
+            echo 'v4.2.0.1 already exists: refusing to replace an existing release' >&2
+            exit 1
+          fi
+          gh release create v4.2.0.1 _release/sso-authentication_4.2.0.1.zip _release/SHA256SUMS \
+            --repo nbenedek/jellyfin-plugin-sso \
+            --target "$GITHUB_SHA" \
+            --title 'SSO Authentication 4.2.0.1 — Jellyfin 12 IP fix' \
+            --notes-file _release/RELEASE-NOTES.md --latest
+          mkdir -p _published
+          gh release download v4.2.0.1 --repo nbenedek/jellyfin-plugin-sso \
+            --pattern sso-authentication_4.2.0.1.zip --dir _published
+          cmp _release/sso-authentication_4.2.0.1.zip _published/sso-authentication_4.2.0.1.zip
+
+      - name: Update Jellyfin catalog without dropping old versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin refs/heads/manifest-release:refs/remotes/origin/manifest-release
+          git show origin/manifest-release:manifest.json > _release/previous.json
+          python3 - <<'PY'
+          import datetime, hashlib, json, pathlib, zipfile
+          p=pathlib.Path('_release')
+          z=p/'sso-authentication_4.2.0.1.zip'
+          with zipfile.ZipFile(z) as f:
+              m=json.loads(f.read('meta.json'))
+          assert (m['version'],m['targetAbi'],m['guid'])==('4.2.0.1','12.0.0.0','505ce9d1-d916-42fa-86ca-673ef241d7df')
+          doc=json.loads((p/'previous.json').read_text())
+          assert len(doc)==1
+          entry=doc[0]
+          assert entry['guid']==m['guid'] and entry['name']=='SSO Authentication'
+          existing={(v['version'],v['targetAbi']) for v in entry['versions']}
+          assert ('4.2.0.0','12.0.0.0') in existing
+          assert ('4.1.0.0','10.11.0.0') in existing
+          assert not any(v['version']=='4.2.0.1' for v in entry['versions'])
+          entry['versions'].insert(0,{
+              'changelog':(p/'RELEASE-NOTES.md').read_text(),
+              'checksum':hashlib.md5(z.read_bytes()).hexdigest(),
+              'sourceUrl':'https://github.com/nbenedek/jellyfin-plugin-sso/releases/download/v4.2.0.1/sso-authentication_4.2.0.1.zip',
+              'targetAbi':'12.0.0.0',
+              'timestamp':datetime.datetime.now(datetime.timezone.utc).isoformat().replace('+00:00','Z'),
+              'version':'4.2.0.1'
+          })
+          (p/'manifest.json').write_text(json.dumps(doc,indent=2,ensure_ascii=False)+'\n')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch -C catalog-publish origin/manifest-release
+          cp _release/manifest.json manifest.json
+          git add manifest.json
+          git commit -m 'catalog: publish SSO 4.2.0.1 and retain prior versions'
+          git push origin HEAD:refs/heads/manifest-release
+          git fetch origin refs/heads/manifest-release:refs/remotes/origin/manifest-release
+          git show origin/manifest-release:manifest.json > _release/verified.json
+          cmp _release/manifest.json _release/verified.json
