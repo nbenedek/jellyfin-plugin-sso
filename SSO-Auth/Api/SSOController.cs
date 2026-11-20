@@ -658,6 +658,9 @@ public class SSOController : ControllerBase
         authRequest.AppVersion = authResponse.AppVersion;
         authRequest.DeviceId = authResponse.DeviceID;
         authRequest.DeviceName = authResponse.DeviceName;
+        // Use ASP.NET Core's effective remote address, after Jellyfin's trusted-proxy processing.
+        // Never read untrusted forwarding headers directly from the request.
+        authRequest.RemoteEndPoint = HttpContext.Connection.RemoteIpAddress?.ToString();
         _logger.LogInformation("Auth request created...");
 
         return await _sessionManager.AuthenticateDirect(authRequest).ConfigureAwait(false);
