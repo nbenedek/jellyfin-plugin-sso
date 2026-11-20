@@ -1,5 +1,14 @@
 # Changelog
 
+## 4.2.0.1 — Client IP reporting fix (2026-11-20)
+
+- Populate Jellyfin's authentication request remote endpoint from the trusted ASP.NET Core connection address.
+- Fix blank IP fields in successful OIDC authentication and online-session activity entries.
+- Do not parse untrusted forwarded-IP headers directly; proxy trust remains configured in Jellyfin.
+- No changes to OIDC identity linking, existing accounts, or folder permissions.
+- Targets Jellyfin 12.x and .NET 10; 4.2.0.0 remains available for rollback, and 4.1.0.0 remains for Jellyfin 10.11.x.
+
+
 This changelog describes the actively maintained OIDC-only fork. Earlier releases and historical SAML functionality belong to the archived [upstream project](https://github.com/9p4/jellyfin-plugin-sso), not to the current fork.
 
 ## 4.1.0.0 — OIDC-only security and usability release (2026-10-31)
